@@ -1,63 +1,57 @@
 import './index.css';
-
-import { navigateTo } from '@devvit/web/client';
-import { context, requestExpandedMode } from '@devvit/web/client';
+import { requestExpandedMode } from '@devvit/web/client';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { TRPCProvider } from './lib/TRPCProvider.js';
+import { trpc } from './lib/trpc.js';
 
-export const Splash = () => {
+const SplashContent = () => {
+  const { data, isLoading } = trpc.game.getGameState.useQuery();
+
   return (
-    <div className="flex relative flex-col justify-center items-center min-h-screen gap-4 bg-white dark:bg-gray-900">
-      <img
-        className="object-contain w-1/2 max-w-[250px] mx-auto"
-        src="/snoo.png"
-        alt="Snoo"
-      />
-      <div className="flex flex-col items-center gap-2">
-        <h1 className="text-2xl font-bold text-center text-gray-900 dark:text-white">
-          Hey {context.username ?? 'user'} 👋
-        </h1>
-        <p className="text-base text-center text-gray-600 dark:text-gray-300">
-          Edit{' '}
-          <span className="bg-[#e5ebee] dark:bg-gray-700 px-1 py-0.5 rounded">
-            src/client/splash.tsx
-          </span>{' '}
-          to get started.
-        </p>
-      </div>
-      <div className="flex items-center justify-center mt-5">
-        <button
-          className="flex items-center justify-center bg-[#d93900] dark:bg-orange-600 text-white w-auto h-10 rounded-full cursor-pointer transition-colors px-4 hover:bg-[#c23300] dark:hover:bg-orange-700"
-          onClick={(e) => requestExpandedMode(e.nativeEvent, 'game')}
-        >
-          Tap to Start
-        </button>
-      </div>
-      <footer className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-3 text-[0.8em] text-gray-600 dark:text-gray-400">
-        <button
-          className="cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors"
-          onClick={() => navigateTo('https://developers.reddit.com/docs')}
-        >
-          Docs
-        </button>
-        <span className="text-gray-300 dark:text-gray-600">|</span>
-        <button
-          className="cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors"
-          onClick={() => navigateTo('https://www.reddit.com/r/Devvit')}
-        >
-          r/Devvit
-        </button>
-        <span className="text-gray-300 dark:text-gray-600">|</span>
-        <button
-          className="cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors"
-          onClick={() => navigateTo('https://discord.com/invite/R7yu2wh9Qz')}
-        >
-          Discord
-        </button>
-      </footer>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-neutral-950 text-white p-4">
+      <h1 className="text-5xl font-black tracking-tighter bg-gradient-to-br from-red-500 to-orange-400 bg-clip-text text-transparent mb-2">NERVE</h1>
+      <p className="text-neutral-400 mb-10 max-w-xs text-center font-medium">Push your luck. Bank before the crash.</p>
+      
+      {isLoading ? (
+        <div className="text-neutral-500 animate-pulse font-mono">Loading Status...</div>
+      ) : (
+        <div className="flex flex-col items-center gap-8">
+          <div className="bg-neutral-900/50 border border-neutral-800 rounded-2xl p-6 w-64 text-center shadow-xl">
+            <h2 className="text-neutral-500 text-xs font-bold uppercase tracking-widest mb-2">Today's Score</h2>
+            <div className="text-4xl font-mono font-bold text-emerald-400">£{data?.totalScore ?? 0}</div>
+            <div className="mt-4 flex justify-center gap-2">
+              {[0, 1, 2].map((i) => {
+                const runIndex = data?.runOrder[i];
+                const isCompleted = runIndex !== undefined ? data?.runsCompleted[runIndex] : false;
+                return (
+                  <div key={i} className={`w-3 h-3 rounded-full shadow-inner ${isCompleted ? 'bg-emerald-500 shadow-emerald-500/50' : 'bg-neutral-800'}`} />
+                );
+              })}
+            </div>
+          </div>
+          
+          {data?.runsCompleted.includes(false) ? (
+            <button
+              className="bg-red-600 hover:bg-red-500 transition-all duration-200 text-white font-black text-lg py-4 px-10 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.4)] active:scale-95 active:shadow-none"
+              onClick={(e) => requestExpandedMode(e.nativeEvent, 'game')}
+            >
+              PLAY NEXT RUN
+            </button>
+          ) : (
+            <div className="text-emerald-500 font-bold bg-emerald-500/10 px-6 py-3 rounded-full border border-emerald-500/20">All runs completed for today!</div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
+
+export const Splash = () => (
+  <TRPCProvider>
+    <SplashContent />
+  </TRPCProvider>
+);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

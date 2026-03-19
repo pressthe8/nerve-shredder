@@ -4,9 +4,9 @@
     "outDir": "../dist/types/client",
     "tsBuildInfoFile": "../dist/types/client/tsconfig.tsbuildinfo",
     "customConditions": ["browser"],
-    "rootDir": "../src/client"
+    "rootDir": ".."
   },
-  "include": ["../src/client/**/*"],
+  "include": ["../src/client/**/*", "../src/server/**/*"],
   "exclude": [],
   "references": [
     {
