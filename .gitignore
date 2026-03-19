@@ -2,3 +2,9 @@ node_modules
 .DS_Store
 dist
 .env
+
+# Prevent stale .js files from shadowing .ts sources during Vite builds.
+# TypeScript imports use .js extensions (e.g. './routers/index.js'), so if a
+# real .js file exists alongside the .ts file, Vite resolves to the .js file
+# instead. This silently bundles old code.
+src/**/*.js

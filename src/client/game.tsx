@@ -1,5 +1,5 @@
 import './index.css';
-import { navigateTo } from '@devvit/web/client';
+import { exitExpandedMode } from '@devvit/web/client';
 import { StrictMode, useEffect, useState, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TRPCProvider } from './lib/TRPCProvider.js';
@@ -138,7 +138,7 @@ const GameContent = () => {
                         ? 'text-neutral-600'
                         : 'text-neutral-700'
                   }`}>
-                    {score !== null && score !== undefined ? `$${score}` : '$0'}
+                    {score !== null && score !== undefined ? `$${score}` : '---'}
                   </div>
                 </div>
               );
@@ -147,14 +147,7 @@ const GameContent = () => {
 
           {/* This Week's Total */}
           <div className="mt-6 bg-gradient-to-br from-orange-950/40 to-orange-900/20 border border-orange-700/30 rounded-2xl p-5 text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <h3 className="text-neutral-400 text-xs font-bold tracking-wider">This Week's Total</h3>
-              {gameState.weekMultiplier && gameState.weekMultiplier > 1.0 && (
-                <span className="text-orange-400 text-xs font-bold bg-orange-500/20 px-2 py-0.5 rounded">
-                  {gameState.weekMultiplier.toFixed(1)}x
-                </span>
-              )}
-            </div>
+            <h3 className="text-neutral-400 text-xs font-bold tracking-wider mb-2">This Week's Total</h3>
             <div className="text-4xl font-mono font-black text-orange-400 tracking-tight">
               ${gameState.weeklyScore?.toLocaleString() ?? 0}
             </div>
@@ -229,7 +222,7 @@ const GameContent = () => {
                  🔥 {gameState.lifetimePerfectDays} Perfect Days Total
                </div>
              )}
-             <button onClick={() => navigateTo('https://www.reddit.com/')} className="px-10 py-4 w-full rounded-full bg-neutral-800 text-white font-black hover:bg-neutral-700 active:scale-95 transition-transform">Close Game</button>
+             <button onClick={(e) => exitExpandedMode(e.nativeEvent)} className="px-10 py-4 w-full rounded-full bg-neutral-800 text-white font-black hover:bg-neutral-700 active:scale-95 transition-transform">Close Game</button>
           </div>
         )}
       </div>

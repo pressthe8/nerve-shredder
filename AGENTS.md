@@ -48,5 +48,6 @@ You are writing a Devvit web application that will be executed on Reddit.com.
 
 - You may find code that references blocks or `@devvit/public-api` while building a feature. Do NOT use this code as this project is configured to use Devvit web only.
 - Whenever you add an endpoint for a new menu item action, ensure that you've added the corresponding mapping to `devvit.json` so that it is properly registered
+- **NEVER create `.js` files in `src/`**. All source files must be `.ts` or `.tsx`. TypeScript imports in this project use `.js` extensions (e.g. `from './routers/index.js'`), which means Vite will resolve to a real `.js` file if one exists, silently ignoring the `.ts` source. This causes the build to bundle stale/old code. The `.gitignore` blocks `src/**/*.js` as a safeguard.
 
 Docs: https://developers.reddit.com/docs/llms.txt.

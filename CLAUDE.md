@@ -22,6 +22,9 @@
 - Leaderboards use `.reverse()` to show highest scores first (Redis zRange returns ascending order)
 - Individual run scores show £0 for runs completed before the code was deployed (expected behavior - new runs will display correctly)
 
+### CRITICAL: No .js files in src/
+**Never create `.js` files in `src/`.** This project uses TypeScript with `.js` import extensions (e.g. `from './routers/index.js'`). If a real `.js` file exists next to its `.ts` counterpart, Vite resolves to the `.js` file and silently bundles stale code — the `.ts` file is completely ignored. This previously caused all features added after the initial commit to never be deployed. The `.gitignore` now blocks `src/**/*.js` as a safeguard.
+
 ### Testing Controls
 **Temporary buttons added to splash screen for development:**
 - "Clear Daily" - Removes all daily stats and scores for current user

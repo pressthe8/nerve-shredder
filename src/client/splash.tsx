@@ -1,21 +1,37 @@
 import './index.css';
 import { requestExpandedMode } from '@devvit/web/client';
-import { StrictMode, useState } from 'react';
+import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TRPCProvider } from './lib/TRPCProvider.js';
 import { trpc } from './lib/trpc.js';
 import { HowToPlay } from './components/HowToPlay.js';
+import { WeeklyBreakdown } from './components/WeeklyBreakdown.js';
+import { PlayerBreakdown } from './components/PlayerBreakdown.js';
 
 const SplashContent = () => {
+  const utils = trpc.useUtils();
   const { data, isLoading } = trpc.game.getGameState.useQuery();
   const { data: dailyLeaderboard } = trpc.game.getLeaderboard.useQuery();
   const { data: weeklyLeaderboard } = trpc.game.getWeeklyLeaderboard.useQuery();
+
+  // Refetch all data when returning from expanded game view
+  useEffect(() => {
+    const onFocus = () => { void utils.invalidate(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [utils]);
   const clearDaily = trpc.game.clearDailyStats.useMutation();
   const clearWeekly = trpc.game.clearWeeklyStats.useMutation();
   const clearAll = trpc.game.clearAllStats.useMutation();
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboardMode, setLeaderboardMode] = useState<'daily' | 'weekly'>('daily');
   const [showHowToPlay, setShowHowToPlay] = useState(false);
+  const [showWeeklyBreakdown, setShowWeeklyBreakdown] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  const { data: debugData, refetch: refetchDebug } = trpc.game.debugInspect.useQuery(undefined, {
+    enabled: showDebug,
+  });
 
   const currentLeaderboard = leaderboardMode === 'daily' ? dailyLeaderboard : weeklyLeaderboard;
 
@@ -35,6 +51,7 @@ const SplashContent = () => {
 
           {/* How to Play Modal */}
           <HowToPlay isOpen={showHowToPlay} onClose={() => setShowHowToPlay(false)} />
+          <WeeklyBreakdown isOpen={showWeeklyBreakdown} onClose={() => setShowWeeklyBreakdown(false)} />
 
           <h1 className="text-5xl font-black tracking-tighter bg-gradient-to-br from-red-500 to-orange-400 bg-clip-text text-transparent mb-2">NERVE</h1>
           <p className="text-neutral-400 mb-10 max-w-xs text-center font-medium">Push your luck. Bank before the crash.</p>
@@ -71,7 +88,7 @@ const SplashContent = () => {
                               ? 'text-neutral-600'
                               : 'text-neutral-700'
                         }`}>
-                          {score !== null && score !== undefined ? `£${score}` : '£0'}
+                          {score !== null && score !== undefined ? `£${score}` : '---'}
                         </div>
                       </div>
                     );
@@ -87,22 +104,18 @@ const SplashContent = () => {
 
               {/* Weekly Total */}
               {data && data.weeklyScore > 0 && (
-                <div className="w-full bg-gradient-to-br from-orange-950/40 to-orange-900/20 border border-orange-700/30 rounded-xl p-4 text-center">
-                  <div className="flex items-center justify-center gap-2 mb-1">
-                    <h3 className="text-neutral-400 text-xs font-bold tracking-wider">This Week's Total</h3>
-                    {data.weekMultiplier && data.weekMultiplier > 1.0 && (
-                      <span className="text-orange-400 text-xs font-bold bg-orange-500/20 px-2 py-0.5 rounded">
-                        {data.weekMultiplier.toFixed(1)}x
-                      </span>
-                    )}
-                  </div>
+                <button
+                  onClick={() => setShowWeeklyBreakdown(true)}
+                  className="w-full bg-gradient-to-br from-orange-950/40 to-orange-900/20 border border-orange-700/30 rounded-xl p-4 text-center hover:from-orange-950/50 hover:to-orange-900/30 transition-colors"
+                >
+                  <h3 className="text-neutral-400 text-xs font-bold tracking-wider mb-1">This Week's Total</h3>
                   <div className="text-3xl font-mono font-black text-orange-400">£{data.weeklyScore.toLocaleString()}</div>
                   {data.weekPerfectDays > 0 && (
                     <div className="mt-2 text-xs text-orange-300/80">
                       {data.weekPerfectDays}/7 Perfect Days
                     </div>
                   )}
-                </div>
+                </button>
               )}
 
               {data?.runsCompleted.includes(false) ? (
@@ -127,7 +140,12 @@ const SplashContent = () => {
               <div className="flex gap-2 mt-4">
                 <button
                   onClick={async () => {
-                    await clearDaily.mutateAsync();
+                    try {
+                      const result = await clearDaily.mutateAsync();
+                      console.log('[Clear Daily]', result);
+                    } catch (e) {
+                      console.error('[Clear Daily] Error:', e);
+                    }
                     window.location.reload();
                   }}
                   className="text-xs px-3 py-1 rounded bg-yellow-900/30 border border-yellow-700/50 text-yellow-400 hover:bg-yellow-900/50 transition-colors"
@@ -136,7 +154,12 @@ const SplashContent = () => {
                 </button>
                 <button
                   onClick={async () => {
-                    await clearWeekly.mutateAsync();
+                    try {
+                      const result = await clearWeekly.mutateAsync();
+                      console.log('[Clear Weekly]', result);
+                    } catch (e) {
+                      console.error('[Clear Weekly] Error:', e);
+                    }
                     window.location.reload();
                   }}
                   className="text-xs px-3 py-1 rounded bg-orange-900/30 border border-orange-700/50 text-orange-400 hover:bg-orange-900/50 transition-colors"
@@ -145,14 +168,83 @@ const SplashContent = () => {
                 </button>
                 <button
                   onClick={async () => {
-                    await clearAll.mutateAsync();
+                    try {
+                      const result = await clearAll.mutateAsync();
+                      console.log('[Clear All]', result);
+                    } catch (e) {
+                      console.error('[Clear All] Error:', e);
+                    }
                     window.location.reload();
                   }}
                   className="text-xs px-3 py-1 rounded bg-red-900/30 border border-red-700/50 text-red-400 hover:bg-red-900/50 transition-colors"
                 >
                   Clear All
                 </button>
+                <button
+                  onClick={() => setShowDebug(!showDebug)}
+                  className="text-xs px-3 py-1 rounded bg-purple-900/30 border border-purple-700/50 text-purple-400 hover:bg-purple-900/50 transition-colors"
+                >
+                  {showDebug ? 'Hide Debug' : 'Debug'}
+                </button>
               </div>
+
+              {/* Debug Panel - Remove before production */}
+              {showDebug && debugData && (
+                <div className="w-full bg-neutral-900/80 border border-neutral-700 rounded-xl p-4 text-left font-mono text-xs overflow-auto max-h-96">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-purple-400 font-bold text-sm">Redis Debug Inspector</h4>
+                    <button
+                      onClick={() => void refetchDebug()}
+                      className="text-xs px-2 py-1 rounded bg-purple-800/50 text-purple-300 hover:bg-purple-700/50"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="text-neutral-400 font-bold mb-1">Meta</div>
+                      <div className="text-neutral-300">User: {debugData.meta.username}</div>
+                      <div className="text-neutral-300">Server Time: {debugData.meta.serverTime}</div>
+                      <div className="text-neutral-300">Day ID: {debugData.meta.dayId} | Week ID: {debugData.meta.weekId}</div>
+                      <div className="text-neutral-300">Day: {debugData.meta.dayOfWeekName}</div>
+                    </div>
+                    <div>
+                      <div className="text-emerald-400 font-bold mb-1">Today (Day {debugData.meta.dayId})</div>
+                      {([0, 1, 2] as const).map(i => {
+                        const run = debugData.today.runs[`run${i}` as keyof typeof debugData.today.runs];
+                        const config = debugData.today.runConfigs?.[i];
+                        return (
+                          <div key={i} className="text-neutral-300">
+                            <div>Run {i}: score={String(run.score ?? 'undefined')} startTime={String(run.startTime ?? 'undefined')}</div>
+                            {config && (
+                              <div className="text-neutral-500 ml-4">
+                                bong={config.bongTimeMs}ms len={config.runLengthMs}ms inc=[{config.baseIncrementRange.join(',')}] jump={config.jumpChance} dip={config.dipChance} spike={config.initialSpikeChance}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <div className="text-neutral-300">Totals: score={String(debugData.today.totals.score ?? 'undefined')} runOrder={String(debugData.today.totals.runOrder ?? 'undefined')}</div>
+                      <div className="text-neutral-300">Daily LB: {String(debugData.today.dailyLeaderboardScore ?? 'undefined')}</div>
+                    </div>
+                    <div>
+                      <div className="text-yellow-400 font-bold mb-1">Yesterday (Day {debugData.meta.yesterdayDayId})</div>
+                      <div className="text-neutral-300">Total: {String(debugData.yesterday.totalScore ?? 'undefined')}</div>
+                      <div className="text-neutral-300">RunOrder: {String(debugData.yesterday.runOrder ?? 'undefined')}</div>
+                    </div>
+                    <div>
+                      <div className="text-orange-400 font-bold mb-1">Weekly (Week {debugData.meta.weekId})</div>
+                      <div className="text-neutral-300">Perfect Days ({debugData.meta.perfectDaysThisWeek}): {String(debugData.weekly.perfectDays ?? 'undefined')}</div>
+                      <div className="text-neutral-300">Current Multiplier: {debugData.meta.weekMultiplier}x</div>
+                      <div className="text-neutral-300">Daily Scores (raw): {JSON.stringify(debugData.weekly.dailyScores)}</div>
+                      <div className="text-neutral-300">Daily Scores (mult): {JSON.stringify(debugData.weekly.dailyScoresMultiplied)}</div>
+                      <div className="text-neutral-300">Daily Multipliers: {JSON.stringify(debugData.weekly.dailyMultipliers)}</div>
+                      <div className="text-neutral-300">Weekly LB: {String(debugData.weekly.weeklyLeaderboardScore ?? 'undefined')}</div>
+                      <div className="text-neutral-300">Lifetime Perfect Days: {String(debugData.weekly.lifetimePerfectDays ?? 'undefined')}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </>
@@ -201,9 +293,10 @@ const SplashContent = () => {
             </h3>
             {currentLeaderboard && currentLeaderboard.length > 0 ? (
               currentLeaderboard.map((entry: { username: string; score: number }, index: number) => (
-                <div
+                <button
                   key={entry.username}
-                  className={`flex items-center justify-between p-4 rounded-xl ${
+                  onClick={() => setSelectedPlayer(entry.username)}
+                  className={`flex items-center justify-between p-4 rounded-xl w-full text-left hover:brightness-110 transition-all ${
                     index === 0
                       ? 'bg-yellow-950/30 border border-yellow-700/50'
                       : index === 1
@@ -231,7 +324,7 @@ const SplashContent = () => {
                   }`}>
                     ${entry.score.toLocaleString()}
                   </div>
-                </div>
+                </button>
               ))
             ) : (
               <div className="text-center text-neutral-500 py-8">
@@ -239,6 +332,16 @@ const SplashContent = () => {
               </div>
             )}
           </div>
+
+          {/* Player Breakdown Modal */}
+          {selectedPlayer && (
+            <PlayerBreakdown
+              isOpen={true}
+              onClose={() => setSelectedPlayer(null)}
+              username={selectedPlayer}
+              mode={leaderboardMode}
+            />
+          )}
         </div>
       )}
     </div>
