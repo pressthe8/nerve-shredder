@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { router, publicProcedure } from '../trpc.js';
 import { context, redis, reddit } from '@devvit/web/server';
+import { computeScoreAtMs, hashSeed } from '../../shared/scoreEngine.js';
+import type { RunPersonality } from '../../shared/scoreEngine.js';
 
 // Each run has a specific pre-computed personality
 const RunPersonalitySchema = z.object({
@@ -8,10 +10,8 @@ const RunPersonalitySchema = z.object({
   jumpChance: z.number(),
   dipChance: z.number(),
   initialSpikeChance: z.number(),
-  runLengthMs: z.number()
+  runLengthMs: z.number().optional() // legacy field — ignored, kept for Redis compat
 });
-
-export type RunPersonality = z.infer<typeof RunPersonalitySchema>;
 
 // The backend adds the hidden bong time
 const ServerRunSchema = z.object({
@@ -26,15 +26,15 @@ const generateDailyRuns = (): ServerRun[] => {
   // Hardcoded 3 distinct run personalities for V1
   return [
     {
-      personality: { baseIncrementRange: [1, 5], jumpChance: 0.05, dipChance: 0.1, initialSpikeChance: 0.2, runLengthMs: 15000 },
+      personality: { baseIncrementRange: [1, 5] as [number, number], jumpChance: 0.05, dipChance: 0.1, initialSpikeChance: 0.2 },
       bongTimeMs: 7800
     },
     {
-      personality: { baseIncrementRange: [3, 10], jumpChance: 0.15, dipChance: 0.2, initialSpikeChance: 0.05, runLengthMs: 12000 },
+      personality: { baseIncrementRange: [3, 10] as [number, number], jumpChance: 0.15, dipChance: 0.2, initialSpikeChance: 0.05 },
       bongTimeMs: 4200
     },
     {
-      personality: { baseIncrementRange: [2, 6], jumpChance: 0.1, dipChance: 0.15, initialSpikeChance: 0.5, runLengthMs: 18000 },
+      personality: { baseIncrementRange: [2, 6] as [number, number], jumpChance: 0.1, dipChance: 0.15, initialSpikeChance: 0.5 },
       bongTimeMs: 11500
     }
   ];
@@ -195,17 +195,19 @@ export const gameRouter = router({
 
       if (!run) throw new Error("Run data not found");
 
+      const seed = hashSeed(dayId, input.runIndex);
+
       return {
         personality: run.personality,
-        serverStartTime: startTime
+        serverStartTime: startTime,
+        seed
       };
     }),
 
   bankRun: publicProcedure
-    .input(z.object({ 
+    .input(z.object({
       runIndex: z.number().int().min(0).max(2),
-      clientElapsedMs: z.number(),
-      bankAmount: z.number()
+      clientElapsedMs: z.number()
     }))
     .mutation(async ({ input }) => {
       const user = await reddit.getCurrentUser();
@@ -243,8 +245,10 @@ export const gameRouter = router({
         // Bust! The client claimed a time later than the bong time.
         finalScore = 0;
       } else {
-        // Valid bank
-        finalScore = input.bankAmount;
+        // Valid bank — server computes the authoritative score
+        const seed = hashSeed(dayId, input.runIndex);
+        const clampedMs = Math.min(input.clientElapsedMs, run.bongTimeMs);
+        finalScore = computeScoreAtMs(seed, run.personality as RunPersonality, clampedMs);
       }
 
       // Record score
@@ -311,6 +315,36 @@ export const gameRouter = router({
           percentile = Math.max(1, Math.round((1 - userRank / totalPlayers) * 100));
         }
       }
+
+      // --- Soft-flagging: cumulative suspicion counters (fire-and-forget) ---
+      const flagOps: Promise<unknown>[] = [
+        redis.incrBy(`flags:${username}:total_runs`, 1)
+      ];
+
+      if (percentile !== null && percentile >= 99) {
+        flagOps.push(redis.incrBy(`flags:${username}:top_percentile_runs`, 1));
+      }
+
+      if (finalScore > 0 && run.bongTimeMs - input.clientElapsedMs < 50) {
+        flagOps.push(redis.incrBy(`flags:${username}:bong_proximity_runs`, 1));
+      }
+
+      if (percentile !== null && percentile >= 99) {
+        try {
+          const fullUser = await reddit.getCurrentUser();
+          if (fullUser?.createdAt) {
+            const accountAgeMs = Date.now() - fullUser.createdAt.getTime();
+            if (accountAgeMs < 48 * 60 * 60 * 1000) {
+              flagOps.push(redis.incrBy(`flags:${username}:new_account_top_runs`, 1));
+            }
+          }
+        } catch {
+          // Silently ignore — flag check must never break the bank flow
+        }
+      }
+
+      // Fire-and-forget — don't block the response on flag writes
+      void Promise.allSettled(flagOps);
 
       return { finalScore, bust: finalScore === 0, percentile };
     }),
@@ -512,8 +546,6 @@ export const gameRouter = router({
           },
           runConfigs: dailyRuns.map((run, i) => ({
             runIndex: i,
-            bongTimeMs: run.bongTimeMs,
-            runLengthMs: run.personality.runLengthMs,
             baseIncrementRange: run.personality.baseIncrementRange,
             jumpChance: run.personality.jumpChance,
             dipChance: run.personality.dipChance,
@@ -671,6 +703,59 @@ export const gameRouter = router({
 
       console.log(`[clearAllStats] Done. Errors: ${errors.length}`);
       return { success: errors.length === 0, message: `Cleared all stats for ${username}`, dayId, weekId, errors };
+    }),
+
+    getSuspiciousPlayers: publicProcedure.query(async () => {
+      const now = new Date();
+      const epochStart = new Date('2024-01-01T00:00:00Z');
+      const dayId = Math.floor((now.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24)).toString();
+
+      // Get today's leaderboard players to check their flags
+      const topPlayers = await redis.zRange(`leaderboard:daily:day:${dayId}`, 0, 99, { by: 'rank' });
+
+      const results: Array<{
+        username: string;
+        leaderboardScore: number;
+        totalRuns: number;
+        topPercentileRuns: number;
+        bongProximityRuns: number;
+        newAccountTopRuns: number;
+      }> = [];
+
+      for (const entry of topPlayers) {
+        const [totalStr, topStr, proxStr, newAccStr] = await Promise.all([
+          redis.get(`flags:${entry.member}:total_runs`),
+          redis.get(`flags:${entry.member}:top_percentile_runs`),
+          redis.get(`flags:${entry.member}:bong_proximity_runs`),
+          redis.get(`flags:${entry.member}:new_account_top_runs`)
+        ]);
+
+        const totalRuns = totalStr ? parseInt(totalStr, 10) : 0;
+        const topPercentileRuns = topStr ? parseInt(topStr, 10) : 0;
+        const bongProximityRuns = proxStr ? parseInt(proxStr, 10) : 0;
+        const newAccountTopRuns = newAccStr ? parseInt(newAccStr, 10) : 0;
+
+        // Only include players with any flags
+        if (topPercentileRuns > 0 || bongProximityRuns > 0 || newAccountTopRuns > 0) {
+          results.push({
+            username: entry.member,
+            leaderboardScore: entry.score,
+            totalRuns,
+            topPercentileRuns,
+            bongProximityRuns,
+            newAccountTopRuns
+          });
+        }
+      }
+
+      // Sort by highest suspicion (top percentile ratio)
+      results.sort((a, b) => {
+        const ratioA = a.totalRuns > 0 ? a.topPercentileRuns / a.totalRuns : 0;
+        const ratioB = b.totalRuns > 0 ? b.topPercentileRuns / b.totalRuns : 0;
+        return ratioB - ratioA;
+      });
+
+      return results;
     })
 });
 

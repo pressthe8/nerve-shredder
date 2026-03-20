@@ -218,7 +218,7 @@ const SplashContent = () => {
                             <div>Run {i}: score={String(run.score ?? 'undefined')} startTime={String(run.startTime ?? 'undefined')}</div>
                             {config && (
                               <div className="text-neutral-500 ml-4">
-                                bong={config.bongTimeMs}ms len={config.runLengthMs}ms inc=[{config.baseIncrementRange.join(',')}] jump={config.jumpChance} dip={config.dipChance} spike={config.initialSpikeChance}
+                                inc=[{config.baseIncrementRange.join(',')}] jump={config.jumpChance} dip={config.dipChance} spike={config.initialSpikeChance}
                               </div>
                             )}
                           </div>

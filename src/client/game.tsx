@@ -5,6 +5,8 @@ import { createRoot } from 'react-dom/client';
 import { TRPCProvider } from './lib/TRPCProvider.js';
 import { trpc } from './lib/trpc.js';
 import { HowToPlay } from './components/HowToPlay.js';
+import { computeScoreAtMs } from '../shared/scoreEngine.js';
+import type { RunPersonality } from '../shared/scoreEngine.js';
 
 const GameContent = () => {
   const { data: gameState, refetch } = trpc.game.getGameState.useQuery();
@@ -19,6 +21,8 @@ const GameContent = () => {
   
   const reqRef = useRef<number>(0);
   const startTimeRef = useRef<number>(0);
+  const seedRef = useRef<number>(0);
+  const personalityRef = useRef<RunPersonality | null>(null);
 
   const startNextRun = useCallback(() => {
     if (!gameState) return;
@@ -36,17 +40,19 @@ const GameContent = () => {
   const executeRun = async () => {
     if (activeRunIndex === null) return;
     try {
-      await startRun.mutateAsync({ runIndex: activeRunIndex });
+      const result = await startRun.mutateAsync({ runIndex: activeRunIndex });
+      seedRef.current = result.seed;
+      personalityRef.current = result.personality as RunPersonality;
       setPhase('RUNNING');
       startTimeRef.current = performance.now();
-      
+
       const loop = (time: number) => {
         const elapsed = time - startTimeRef.current;
-        const val = Math.floor(10 * Math.pow(1.0003, elapsed));
+        const val = computeScoreAtMs(seedRef.current, personalityRef.current!, elapsed);
         setAmount(val);
         reqRef.current = requestAnimationFrame(loop);
       };
-      
+
       reqRef.current = requestAnimationFrame(loop);
     } catch (e) {
       console.error(e);
@@ -58,13 +64,11 @@ const GameContent = () => {
     
     cancelAnimationFrame(reqRef.current);
     const elapsed = performance.now() - startTimeRef.current;
-    const bankedValue = amount;
-    
+
     try {
-      const res = await bankRun.mutateAsync({ 
-        runIndex: activeRunIndex, 
-        clientElapsedMs: elapsed,
-        bankAmount: bankedValue
+      const res = await bankRun.mutateAsync({
+        runIndex: activeRunIndex,
+        clientElapsedMs: elapsed
       });
       
       if (res.bust) {
