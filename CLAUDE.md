@@ -17,6 +17,46 @@
 - ✅ Weekly leaderboard with proper sorting
 - ✅ Lifetime Perfect Days counter
 
+## Core Game Mechanic
+
+### How It Works
+Players get **3 runs per day**. Each run shows a sequence of £ amounts one at a time (1 per second). The player must hit BANK to lock in the current amount. If they don't bank before the sequence ends, they auto-bust and score £0.
+
+### Sequence Generation (`src/shared/scoreEngine.ts`)
+- Sequences are **deterministic**: seeded by `hashSeed(dayId, runIndex)` using mulberry32 PRNG
+- Every player sees the **same sequence** for the same run on the same day
+- Step count is **randomized per run** within a `stepRange` using triangular distribution (average of 2 PRNG rolls — most runs cluster mid-range, with occasional short/long outliers)
+- Each step: score can go up (normal increment), spike (jump), or dip — controlled by the run's personality parameters
+- Score starts at £10, floored at £1
+
+### Run Personalities (hardcoded in `src/server/routers/index.ts`)
+There are exactly **3 fixed personalities** — one of each is used every day:
+
+| Personality | Step Range | Increment | Jump% | Dip% | Initial Spike% | Feel |
+|-------------|-----------|-----------|-------|------|----------------|------|
+| Slow & Cautious | 6–14 | £1–5 | 5% | 10% | 20% | Steady climb |
+| Fast & Volatile | 4–10 | £3–10 | 15% | 20% | 5% | Wild swings |
+| Moderate & Spiky | 8–18 | £2–6 | 10% | 15% | 50% | Long game |
+
+**Personalities are NOT randomized per day** — the same 3 are always used. What changes daily is the number sequence (via the day-based seed) and the step count (via PRNG within the step range).
+
+**Player run order IS randomized** — each player gets the 3 runs shuffled into a random order (stored in Redis for consistency).
+
+### Client-Server Protocol
+1. `startRun(runIndex)` → server generates the full sequence, returns `{ sequence: number[] }`
+2. Client steps through the array with `setInterval` (1 second per step via `STEP_DISPLAY_MS`)
+3. Auto-bust triggers when the client reaches the end of the sequence
+4. `bankRun(runIndex, stepIndex)` → server regenerates the sequence for validation, checks timing, returns score
+
+### Anti-Cheat
+- **Timing validation**: server checks `serverElapsed >= stepIndex * STEP_DISPLAY_MS - buffer`
+- **Authoritative scoring**: server regenerates the sequence independently — client can't fake a score
+- **Soft-flagging**: tracks bong proximity (banking on last step), top percentile frequency, new accounts
+
+### Key Constants
+- `STEP_DISPLAY_MS = 1000` — 1 second per step (in `src/shared/scoreEngine.ts`)
+- `LATENCY_BUFFER_MS = 1000` — timing tolerance (in `src/server/routers/index.ts`)
+
 ### Known Issues to Monitor
 - Weekly leaderboard may appear empty if no users have completed runs this week
 - Leaderboards use `.reverse()` to show highest scores first (Redis zRange returns ascending order)

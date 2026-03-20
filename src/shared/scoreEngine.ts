@@ -8,8 +8,11 @@ export type RunPersonality = {
   initialSpikeChance: number;
 };
 
-/** Tick quantization interval in milliseconds */
+/** Tick quantization interval in milliseconds (legacy — kept for backward compat) */
 export const TICK_MS = 50;
+
+/** How long each step is displayed in the new sequence-based mechanic */
+export const STEP_DISPLAY_MS = 1000;
 
 /**
  * mulberry32: deterministic 32-bit PRNG.
@@ -97,4 +100,64 @@ export const computeScoreAtMs = (
   }
 
   return Math.floor(score);
+};
+
+/**
+ * Generate a pre-determined sequence of scores for a run.
+ *
+ * The step count is randomized within stepRange using a triangular distribution
+ * (average of 2 PRNG rolls) so most runs cluster toward the middle of the range.
+ * Because the PRNG is seeded deterministically, every player gets the same
+ * sequence for the same day/run.
+ *
+ * RNG consumption order:
+ *   2 calls for step-count (triangular distribution)
+ *   2 calls for initial spike check (step 0)
+ *   3 calls per subsequent step (branch selector, increment size, magnitude)
+ */
+export const generateSequence = (
+  seed: number,
+  personality: RunPersonality,
+  stepRange: [number, number]
+): number[] => {
+  const rng = mulberry32(seed);
+
+  // Determine step count using triangular distribution (2 rolls averaged)
+  const [minSteps, maxSteps] = stepRange;
+  const roll1 = rng();
+  const roll2 = rng();
+  const avg = (roll1 + roll2) / 2;
+  const stepCount = Math.round(minSteps + avg * (maxSteps - minSteps));
+
+  const sequence: number[] = [];
+  let score = 10;
+
+  // Step 0: initial spike check (always consumes exactly 2 RNG calls)
+  const spikeRoll = rng();
+  if (spikeRoll < personality.initialSpikeChance) {
+    score = Math.floor(score * (3 + rng() * 5));
+  } else {
+    rng(); // consume to keep RNG in sync
+  }
+  sequence.push(score);
+
+  // Steps 1..stepCount-1 (each consumes exactly 3 RNG calls)
+  const [lo, hi] = personality.baseIncrementRange;
+  for (let t = 1; t < stepCount; t++) {
+    const roll = rng();
+    const baseIncrement = lo + rng() * (hi - lo);
+    const roll3 = rng();
+
+    if (roll < personality.dipChance) {
+      score -= baseIncrement * (0.5 + roll3 * 1.5);
+    } else if (roll < personality.dipChance + personality.jumpChance) {
+      score += baseIncrement * (2 + roll3 * 4);
+    } else {
+      score += baseIncrement;
+    }
+    if (score < 1) score = 1;
+    sequence.push(Math.floor(score));
+  }
+
+  return sequence;
 };

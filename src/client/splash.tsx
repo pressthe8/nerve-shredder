@@ -36,7 +36,7 @@ const SplashContent = () => {
   const currentLeaderboard = leaderboardMode === 'daily' ? dailyLeaderboard : weeklyLeaderboard;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-neutral-950 text-white p-4">
+    <div className={`flex flex-col items-center min-h-screen bg-neutral-950 text-white p-4 ${showLeaderboard ? 'justify-start pt-8' : 'justify-center'}`}>
       {!showLeaderboard ? (
         <>
           {/* Hamburger Menu Button */}
@@ -54,16 +54,16 @@ const SplashContent = () => {
           <WeeklyBreakdown isOpen={showWeeklyBreakdown} onClose={() => setShowWeeklyBreakdown(false)} />
 
           <h1 className="text-5xl font-black tracking-tighter bg-gradient-to-br from-red-500 to-orange-400 bg-clip-text text-transparent mb-2">NERVE</h1>
-          <p className="text-neutral-400 mb-10 max-w-xs text-center font-medium">Push your luck. Bank before the crash.</p>
+          <p className="text-neutral-400 mb-4 max-w-xs text-center font-medium">Push your luck. Bank before the crash.</p>
 
           {isLoading ? (
             <div className="text-neutral-500 animate-pulse font-mono">Loading Status...</div>
           ) : (
-            <div className="flex flex-col items-center gap-8 w-full max-w-md">
+            <div className="flex flex-col items-center gap-4 w-full max-w-md">
               {/* Today's Attempts */}
               <div className="w-full">
                 <h3 className="text-neutral-400 text-center text-xs font-bold tracking-wide mb-3">Today's Attempts</h3>
-                <div className="flex gap-3 justify-center mb-4">
+                <div className="flex gap-3 justify-center">
                   {[0, 1, 2].map((i) => {
                     const runIndex = data?.runOrder[i];
                     const score = runIndex !== undefined && data?.runScores ? data.runScores[runIndex] : null;
@@ -94,29 +94,29 @@ const SplashContent = () => {
                     );
                   })}
                 </div>
-
-                {/* Today's Total */}
-                <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl p-4 text-center">
-                  <h2 className="text-neutral-500 text-xs font-bold uppercase tracking-widest mb-1">Today's Total</h2>
-                  <div className="text-3xl font-mono font-bold text-emerald-400">£{data?.totalScore ?? 0}</div>
-                </div>
               </div>
 
-              {/* Weekly Total */}
-              {data && data.weeklyScore > 0 && (
-                <button
-                  onClick={() => setShowWeeklyBreakdown(true)}
-                  className="w-full bg-gradient-to-br from-orange-950/40 to-orange-900/20 border border-orange-700/30 rounded-xl p-4 text-center hover:from-orange-950/50 hover:to-orange-900/30 transition-colors"
-                >
-                  <h3 className="text-neutral-400 text-xs font-bold tracking-wider mb-1">This Week's Total</h3>
-                  <div className="text-3xl font-mono font-black text-orange-400">£{data.weeklyScore.toLocaleString()}</div>
-                  {data.weekPerfectDays > 0 && (
-                    <div className="mt-2 text-xs text-orange-300/80">
-                      {data.weekPerfectDays}/7 Perfect Days
-                    </div>
-                  )}
-                </button>
-              )}
+              {/* Today's Total + This Week's Total side by side */}
+              <div className="flex gap-3 w-full">
+                <div className="flex-1 bg-neutral-900/50 border border-neutral-800 rounded-xl p-4 text-center">
+                  <h2 className="text-neutral-500 text-xs font-bold uppercase tracking-widest mb-1">Today's Total</h2>
+                  <div className="text-2xl font-mono font-bold text-cyan-400">£{data?.totalScore ?? 0}</div>
+                </div>
+                {data && data.weeklyScore > 0 && (
+                  <button
+                    onClick={() => setShowWeeklyBreakdown(true)}
+                    className="flex-1 bg-gradient-to-br from-amber-950/40 to-amber-900/20 border border-amber-700/30 rounded-xl p-4 text-center hover:from-amber-950/50 hover:to-amber-900/30 transition-colors"
+                  >
+                    <h3 className="text-neutral-400 text-xs font-bold tracking-wider mb-1">This Week's Total</h3>
+                    <div className="text-2xl font-mono font-black text-amber-400">£{data.weeklyScore.toLocaleString()}</div>
+                    {data.weekPerfectDays > 0 && (
+                      <div className="mt-1 text-xs text-amber-300/80">
+                        {data.weekPerfectDays}/7 Perfect Days
+                      </div>
+                    )}
+                  </button>
+                )}
+              </div>
 
               {data?.runsCompleted.includes(false) ? (
                 <button
@@ -126,7 +126,7 @@ const SplashContent = () => {
                   PLAY NEXT RUN
                 </button>
               ) : (
-                <div className="text-emerald-500 font-bold bg-emerald-500/10 px-6 py-3 rounded-full border border-emerald-500/20">All runs completed for today!</div>
+                <div className="text-cyan-500 font-bold bg-cyan-500/10 px-6 py-3 rounded-full border border-cyan-500/20">All runs completed for today!</div>
               )}
 
               <button
@@ -268,7 +268,7 @@ const SplashContent = () => {
               onClick={() => setLeaderboardMode('daily')}
               className={`flex-1 py-3 rounded-xl font-bold transition-all ${
                 leaderboardMode === 'daily'
-                  ? 'bg-emerald-600 text-white shadow-lg'
+                  ? 'bg-cyan-600 text-white shadow-lg'
                   : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
               }`}
             >
@@ -278,7 +278,7 @@ const SplashContent = () => {
               onClick={() => setLeaderboardMode('weekly')}
               className={`flex-1 py-3 rounded-xl font-bold transition-all ${
                 leaderboardMode === 'weekly'
-                  ? 'bg-orange-600 text-white shadow-lg'
+                  ? 'bg-amber-600 text-white shadow-lg'
                   : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
               }`}
             >
@@ -320,7 +320,7 @@ const SplashContent = () => {
                     </div>
                   </div>
                   <div className={`text-xl font-mono font-bold ${
-                    leaderboardMode === 'daily' ? 'text-emerald-400' : 'text-orange-400'
+                    leaderboardMode === 'daily' ? 'text-cyan-400' : 'text-amber-400'
                   }`}>
                     ${entry.score.toLocaleString()}
                   </div>

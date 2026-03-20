@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import { router, publicProcedure } from '../trpc.js';
 import { context, redis, reddit } from '@devvit/web/server';
-import { computeScoreAtMs, hashSeed } from '../../shared/scoreEngine.js';
-import type { RunPersonality } from '../../shared/scoreEngine.js';
+import { generateSequence, hashSeed, STEP_DISPLAY_MS } from '../../shared/scoreEngine.js';
 
 // Each run has a specific pre-computed personality
 const RunPersonalitySchema = z.object({
@@ -10,43 +9,46 @@ const RunPersonalitySchema = z.object({
   jumpChance: z.number(),
   dipChance: z.number(),
   initialSpikeChance: z.number(),
-  runLengthMs: z.number().optional() // legacy field — ignored, kept for Redis compat
 });
 
-// The backend adds the hidden bong time
+// The backend defines a step range; actual step count is determined by the PRNG
 const ServerRunSchema = z.object({
   personality: RunPersonalitySchema,
-  bongTimeMs: z.number()
+  stepRange: z.tuple([z.number(), z.number()]),
 });
 
 type ServerRun = z.infer<typeof ServerRunSchema>;
 
-// We pre-compute 3 runs for the day
+// 3 distinct run personalities per day
 const generateDailyRuns = (): ServerRun[] => {
-  // Hardcoded 3 distinct run personalities for V1
   return [
     {
       personality: { baseIncrementRange: [1, 5] as [number, number], jumpChance: 0.05, dipChance: 0.1, initialSpikeChance: 0.2 },
-      bongTimeMs: 7800
+      stepRange: [6, 14] as [number, number],
     },
     {
       personality: { baseIncrementRange: [3, 10] as [number, number], jumpChance: 0.15, dipChance: 0.2, initialSpikeChance: 0.05 },
-      bongTimeMs: 4200
+      stepRange: [4, 10] as [number, number],
     },
     {
       personality: { baseIncrementRange: [2, 6] as [number, number], jumpChance: 0.1, dipChance: 0.15, initialSpikeChance: 0.5 },
-      bongTimeMs: 11500
-    }
+      stepRange: [8, 18] as [number, number],
+    },
   ];
 };
 
 const getDailyRuns = async (dayId: string): Promise<ServerRun[]> => {
   const runsStr = await redis.get(`global:day:${dayId}:runs`);
   if (runsStr) {
-    return JSON.parse(runsStr) as ServerRun[];
+    const parsed = JSON.parse(runsStr) as Record<string, unknown>[];
+    // Migrate stale data: old format had bongTimeMs, new format has stepRange
+    const isOldFormat = parsed[0] && 'bongTimeMs' in parsed[0] && !('stepRange' in parsed[0]);
+    if (!isOldFormat) {
+      return parsed as unknown as ServerRun[];
+    }
+    // Fall through to regenerate with new format
   }
   const runs = generateDailyRuns();
-  // Store them to ensure consistency
   await redis.set(`global:day:${dayId}:runs`, JSON.stringify(runs));
   return runs;
 };
@@ -189,25 +191,22 @@ export const gameRouter = router({
       const startTime = Date.now();
       await redis.set(`user:${username}:day:${dayId}:run:${input.runIndex}:startTime`, startTime.toString());
 
-      // Get daily runs and return the personality for this run
+      // Get daily runs and generate the deterministic sequence
       const runs = await getDailyRuns(dayId);
       const run = runs[input.runIndex];
 
       if (!run) throw new Error("Run data not found");
 
       const seed = hashSeed(dayId, input.runIndex);
+      const sequence = generateSequence(seed, run.personality, run.stepRange);
 
-      return {
-        personality: run.personality,
-        serverStartTime: startTime,
-        seed
-      };
+      return { sequence };
     }),
 
   bankRun: publicProcedure
     .input(z.object({
       runIndex: z.number().int().min(0).max(2),
-      clientElapsedMs: z.number()
+      stepIndex: z.number().int().min(0),
     }))
     .mutation(async ({ input }) => {
       const user = await reddit.getCurrentUser();
@@ -232,28 +231,33 @@ export const gameRouter = router({
 
       if (!run) throw new Error("Run data not found");
 
+      // Regenerate the authoritative sequence server-side
+      const seed = hashSeed(dayId, input.runIndex);
+      const sequence = generateSequence(seed, run.personality, run.stepRange);
+
       const startTime = parseInt(startTimeStr, 10);
       const serverElapsedMs = Date.now() - startTime;
 
       let finalScore = 0;
+      const isBust = input.stepIndex >= sequence.length;
 
-      // Validate against bong time
-      if (serverElapsedMs > run.bongTimeMs + LATENCY_BUFFER_MS) {
-        // Bust! The server tracked more time than the bong time.
-        finalScore = 0;
-      } else if (input.clientElapsedMs > run.bongTimeMs) {
-        // Bust! The client claimed a time later than the bong time.
+      if (isBust) {
+        // Bust — player didn't bank before sequence ended
         finalScore = 0;
       } else {
-        // Valid bank — server computes the authoritative score
-        const seed = hashSeed(dayId, input.runIndex);
-        const clampedMs = Math.min(input.clientElapsedMs, run.bongTimeMs);
-        finalScore = computeScoreAtMs(seed, run.personality as RunPersonality, clampedMs);
+        // Timing validation: player must have waited through each step
+        const expectedMinMs = input.stepIndex * STEP_DISPLAY_MS - LATENCY_BUFFER_MS;
+        if (serverElapsedMs < expectedMinMs) {
+          // Suspicious — banked too fast for the claimed step
+          finalScore = 0;
+        } else {
+          finalScore = sequence[input.stepIndex] ?? 0;
+        }
       }
 
       // Record score
       await redis.set(`user:${username}:day:${dayId}:run:${input.runIndex}:score`, finalScore.toString());
-      
+
       // Update totals
       const currentTotalStr = await redis.hGet(`user:${username}:day:${dayId}:totals`, 'score');
       const newTotal = (currentTotalStr ? parseInt(currentTotalStr, 10) : 0) + finalScore;
@@ -275,7 +279,6 @@ export const gameRouter = router({
       if (allComplete && allSuccessful) {
         // Perfect Day achieved! Track it
         const weekId = getWeekId(now);
-        // Store Perfect Days as JSON array (Redis sets not available)
         const existingPerfectDays = await redis.get(`user:${username}:week:${weekId}:perfect_days`);
         const perfectDaysArray = existingPerfectDays ? JSON.parse(existingPerfectDays as string) : [];
         if (!perfectDaysArray.includes(dayId)) {
@@ -288,18 +291,15 @@ export const gameRouter = router({
       // Update weekly leaderboard
       const weekId = getWeekId(now);
 
-      // Get current perfect days count (including any just-earned perfect day)
       const currentPerfectDaysStr = await redis.get(`user:${username}:week:${weekId}:perfect_days`);
       const currentPerfectDaysCount = currentPerfectDaysStr ? JSON.parse(currentPerfectDaysStr as string).length : 0;
       const multiplier = getWeeklyMultiplier(currentPerfectDaysCount);
       const multipliedScore = Math.floor(newTotal * multiplier);
 
-      // Store raw score, multiplied score, and multiplier used
       await redis.hSet(`user:${username}:week:${weekId}:daily_scores`, { [dayId]: newTotal.toString() });
       await redis.hSet(`user:${username}:week:${weekId}:daily_scores_multiplied`, { [dayId]: multipliedScore.toString() });
       await redis.hSet(`user:${username}:week:${weekId}:daily_multipliers`, { [dayId]: multiplier.toString() });
 
-      // Recalculate weekly total from multiplied scores
       const weeklyTotal = await calculateWeeklyTotal(username, weekId);
       await redis.zAdd(`leaderboard:weekly:week:${weekId}`, { member: username, score: weeklyTotal });
 
@@ -310,8 +310,6 @@ export const gameRouter = router({
         const totalPlayers = await redis.zCard(`leaderboard:daily:day:${dayId}`);
 
         if (userRank !== null && userRank !== undefined && totalPlayers >= 5) {
-          // zRank returns 0-indexed rank where 0 is lowest score
-          // Percentile: what percentage of players scored lower than this user
           percentile = Math.max(1, Math.round((1 - userRank / totalPlayers) * 100));
         }
       }
@@ -325,7 +323,8 @@ export const gameRouter = router({
         flagOps.push(redis.incrBy(`flags:${username}:top_percentile_runs`, 1));
       }
 
-      if (finalScore > 0 && run.bongTimeMs - input.clientElapsedMs < 50) {
+      // Flag if banked on the very last step (bong proximity)
+      if (finalScore > 0 && input.stepIndex >= sequence.length - 1) {
         flagOps.push(redis.incrBy(`flags:${username}:bong_proximity_runs`, 1));
       }
 
@@ -343,7 +342,6 @@ export const gameRouter = router({
         }
       }
 
-      // Fire-and-forget — don't block the response on flag writes
       void Promise.allSettled(flagOps);
 
       return { finalScore, bust: finalScore === 0, percentile };
@@ -393,9 +391,11 @@ export const gameRouter = router({
         const daysSinceEpoch = parseInt(dayId, 10);
         const date = new Date(epochStart.getTime() + daysSinceEpoch * 24 * 60 * 60 * 1000);
         const dayOfWeek = getDayOfWeek(date);
-        const rawScore = parseInt(rawScores[dayId], 10);
-        const multipliedScore = multipliedScores[dayId] ? parseInt(multipliedScores[dayId], 10) : rawScore;
-        const multiplier = multipliers[dayId] ? parseFloat(multipliers[dayId]) : 1.0;
+        const rawScore = parseInt(rawScores[dayId] ?? '0', 10);
+        const multScoreStr = multipliedScores[dayId];
+        const multipliedScore = multScoreStr ? parseInt(multScoreStr, 10) : rawScore;
+        const multStr = multipliers[dayId];
+        const multiplier = multStr ? parseFloat(multStr) : 1.0;
 
         return {
           dayId,
@@ -452,9 +452,11 @@ export const gameRouter = router({
           const daysSinceEpoch = parseInt(dayId, 10);
           const date = new Date(epochStart.getTime() + daysSinceEpoch * 24 * 60 * 60 * 1000);
           const dayOfWeek = getDayOfWeek(date);
-          const rawScore = parseInt(rawScores[dayId], 10);
-          const multipliedScore = multipliedScores[dayId] ? parseInt(multipliedScores[dayId], 10) : rawScore;
-          const multiplier = multipliers[dayId] ? parseFloat(multipliers[dayId]) : 1.0;
+          const rawScore = parseInt(rawScores[dayId] ?? '0', 10);
+          const multScoreStr = multipliedScores[dayId];
+          const multipliedScore = multScoreStr ? parseInt(multScoreStr, 10) : rawScore;
+          const multStr = multipliers[dayId];
+          const multiplier = multStr ? parseFloat(multStr) : 1.0;
 
           return {
             dayId,
@@ -550,6 +552,7 @@ export const gameRouter = router({
             jumpChance: run.personality.jumpChance,
             dipChance: run.personality.dipChance,
             initialSpikeChance: run.personality.initialSpikeChance,
+            stepRange: run.stepRange,
           })),
           totals: { score: totalsScore, runOrder: totalsRunOrder },
           dailyLeaderboardScore: dailyLbScore,
@@ -575,6 +578,7 @@ export const gameRouter = router({
       const now = new Date();
       const epochStart = new Date('2024-01-01T00:00:00Z');
       const dayId = Math.floor((now.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24)).toString();
+      const weekId = getWeekId(now);
 
       console.log(`[clearDailyStats] Clearing for ${username} on day ${dayId}`);
       const errors: string[] = [];
@@ -603,6 +607,58 @@ export const gameRouter = router({
         await redis.zRem(`leaderboard:daily:day:${dayId}`, [username]);
       } catch (e) {
         const msg = `Failed to zRem from daily leaderboard: ${e}`;
+        console.log(`[clearDailyStats] ${msg}`);
+        errors.push(msg);
+      }
+
+      // Also remove today's entry from weekly data structures
+      const weeklyHashKeys = [
+        `user:${username}:week:${weekId}:daily_scores`,
+        `user:${username}:week:${weekId}:daily_scores_multiplied`,
+        `user:${username}:week:${weekId}:daily_multipliers`,
+      ];
+      for (const hashKey of weeklyHashKeys) {
+        try {
+          await redis.hDel(hashKey, [dayId]);
+        } catch (e) {
+          const msg = `Failed to hDel ${dayId} from ${hashKey}: ${e}`;
+          console.log(`[clearDailyStats] ${msg}`);
+          errors.push(msg);
+        }
+      }
+
+      // Remove today from perfect days list if present
+      try {
+        const perfectDaysStr = await redis.get(`user:${username}:week:${weekId}:perfect_days`);
+        if (perfectDaysStr) {
+          const perfectDaysArray: string[] = JSON.parse(perfectDaysStr);
+          const filtered = perfectDaysArray.filter(d => d !== dayId);
+          if (filtered.length !== perfectDaysArray.length) {
+            await redis.set(`user:${username}:week:${weekId}:perfect_days`, JSON.stringify(filtered));
+            // Decrement lifetime perfect days counter
+            const lifetimeStr = await redis.get(`user:${username}:stats:lifetime_perfect_days`);
+            const lifetime = lifetimeStr ? parseInt(lifetimeStr, 10) : 0;
+            if (lifetime > 0) {
+              await redis.set(`user:${username}:stats:lifetime_perfect_days`, (lifetime - 1).toString());
+            }
+          }
+        }
+      } catch (e) {
+        const msg = `Failed to update perfect days: ${e}`;
+        console.log(`[clearDailyStats] ${msg}`);
+        errors.push(msg);
+      }
+
+      // Recalculate and update weekly leaderboard
+      try {
+        const weeklyTotal = await calculateWeeklyTotal(username, weekId);
+        if (weeklyTotal > 0) {
+          await redis.zAdd(`leaderboard:weekly:week:${weekId}`, { member: username, score: weeklyTotal });
+        } else {
+          await redis.zRem(`leaderboard:weekly:week:${weekId}`, [username]);
+        }
+      } catch (e) {
+        const msg = `Failed to update weekly leaderboard: ${e}`;
         console.log(`[clearDailyStats] ${msg}`);
         errors.push(msg);
       }

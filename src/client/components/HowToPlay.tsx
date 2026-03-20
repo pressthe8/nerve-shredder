@@ -21,7 +21,7 @@ export const HowToPlay = ({ isOpen, onClose }: HowToPlayProps) => {
 
         <div className="p-6 space-y-6">
           <div className="text-center text-neutral-300 text-sm mb-6">
-            Watch the money tick up (and sometimes down!). Your goal is to cash out before you bust.
+            Amounts appear one at a time. Bank before the sequence ends or lose it all.
           </div>
 
           <div className="space-y-5">
@@ -42,9 +42,9 @@ export const HowToPlay = ({ isOpen, onClose }: HowToPlayProps) => {
                 ⚡
               </div>
               <div>
-                <h3 className="text-white font-bold mb-1">Random Changes</h3>
+                <h3 className="text-white font-bold mb-1">Watch Each Amount</h3>
                 <p className="text-neutral-400 text-sm">
-                  Money can jump up, down, or make big leaps
+                  New amounts appear one by one — they can jump up, dip down, or spike big
                 </p>
               </div>
             </div>
@@ -54,9 +54,9 @@ export const HowToPlay = ({ isOpen, onClose }: HowToPlayProps) => {
                 🎯
               </div>
               <div>
-                <h3 className="text-white font-bold mb-1">Hidden Bust Point</h3>
+                <h3 className="text-white font-bold mb-1">Bank or Bust</h3>
                 <p className="text-neutral-400 text-sm">
-                  You won't know when you'll bust until it's too late
+                  Hit BANK to lock in the current amount. Wait too long and you crash out with nothing.
                 </p>
               </div>
             </div>
