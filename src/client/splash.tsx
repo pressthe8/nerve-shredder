@@ -68,7 +68,7 @@ const SplashContent = () => {
   }
 
   return (
-    <div className={`flex flex-col items-center min-h-screen bg-neutral-950 text-white p-4 ${showLeaderboard ? 'justify-start pt-8' : 'justify-center'}`}>
+    <div className={`flex flex-col items-center min-h-screen bg-neutral-950 text-white p-3 ${showLeaderboard ? 'justify-start pt-8' : 'justify-center'}`}>
       {!showLeaderboard ? (
         <>
           {/* Hamburger Menu Button */}
@@ -85,13 +85,13 @@ const SplashContent = () => {
           <HowToPlay isOpen={showHowToPlay} onClose={() => setShowHowToPlay(false)} />
           <WeeklyBreakdown isOpen={showWeeklyBreakdown} onClose={() => setShowWeeklyBreakdown(false)} />
 
-          <h1 className="text-5xl font-black tracking-tighter bg-gradient-to-br from-red-500 to-orange-400 bg-clip-text text-transparent mb-2">NERVE</h1>
-          <p className="text-neutral-400 mb-4 max-w-xs text-center font-medium">Push your luck. Bank before the crash.</p>
+          <img src="/Nerve Shredder 500x500.jpeg" alt="Nerve Shredder" className="w-20 h-20 mb-1 rounded-lg" />
+          <p className="text-neutral-400 mb-2 max-w-xs text-center font-medium text-sm">Push your luck. Bank before the crash.</p>
 
           {isLoading ? (
             <div className="text-neutral-500 animate-pulse font-mono">Loading Status...</div>
           ) : (
-            <div className="flex flex-col items-center gap-4 w-full max-w-md">
+            <div className="flex flex-col items-center gap-5 w-full max-w-md">
               {/* Today's Attempts */}
               <div className="w-full">
                 <h3 className="text-neutral-400 text-center text-xs font-bold tracking-wide mb-3">Today's Attempts</h3>
@@ -139,7 +139,7 @@ const SplashContent = () => {
                     onClick={() => setShowWeeklyBreakdown(true)}
                     className="flex-1 bg-gradient-to-br from-amber-950/40 to-amber-900/20 border border-amber-700/30 rounded-xl p-4 text-center hover:from-amber-950/50 hover:to-amber-900/30 transition-colors"
                   >
-                    <h3 className="text-neutral-400 text-xs font-bold tracking-wider mb-1">This Week's Total</h3>
+                    <h3 className="text-neutral-500 text-xs font-bold uppercase tracking-widest mb-1">This Week's Total</h3>
                     <div className="text-2xl font-mono font-black text-amber-400">£{data.weeklyScore.toLocaleString()}</div>
                     {data.weekPerfectDays > 0 && (
                       <div className="mt-1 text-xs text-amber-300/80">
@@ -169,6 +169,7 @@ const SplashContent = () => {
               </button>
 
               {/* Testing Controls - Remove before production */}
+              <div className="mt-20" />
               <div className="flex gap-2 mt-4">
                 <button
                   onClick={async () => {
