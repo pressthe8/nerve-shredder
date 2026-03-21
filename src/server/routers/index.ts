@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { router, publicProcedure } from '../trpc.js';
 import { context, redis, reddit } from '@devvit/web/server';
 import { generateSequence, hashSeed, STEP_DISPLAY_MS } from '../../shared/scoreEngine.js';
+import { getWeekId, getDayOfWeek, getGameDayLabel, getWeekLabel } from '../../shared/weekUtils.js';
 
 // Each run has a specific pre-computed personality
 const RunPersonalitySchema = z.object({
@@ -59,23 +60,6 @@ const getDailyRuns = async (dayId: string): Promise<ServerRun[]> => {
 
 const LATENCY_BUFFER_MS = 1000; // 1 second buffer for latency
 
-// Week ID calculation - weeks since epoch (Monday as week start)
-const getWeekId = (date: Date): string => {
-  const epochStart = new Date('2024-01-01T00:00:00Z');
-  const daysSinceEpoch = Math.floor((date.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24));
-  // ISO 8601: Monday is first day of week
-  // Adjust to get week number starting from Monday
-  const epochDay = epochStart.getUTCDay(); // 1 = Monday for 2024-01-01
-  const adjustedDays = daysSinceEpoch + (epochDay === 0 ? 6 : epochDay - 1);
-  return Math.floor(adjustedDays / 7).toString();
-};
-
-// Get day of week (Monday = 0, Sunday = 6)
-const getDayOfWeek = (date: Date): number => {
-  const day = date.getUTCDay();
-  return day === 0 ? 6 : day - 1;
-};
-
 // Get weekly multiplier based on perfect days earned this week
 const getWeeklyMultiplier = (perfectDayCount: number): number => {
   const multipliers = [1.0, 1.1, 1.2, 1.3, 1.4, 1.4, 1.5];
@@ -100,6 +84,49 @@ const calculateWeeklyTotal = async (username: string, weekId: string): Promise<n
   }
 
   return total;
+};
+
+/**
+ * Resolve the weekId for the current post.
+ * Checks context.postData first, then Redis fallback, then legacy handling.
+ */
+const resolvePostWeekId = async (): Promise<string | null> => {
+  const { postId, postData } = context;
+  if (!postId) return null;
+
+  // Primary: postData set at post creation time
+  if (postData && typeof postData === 'object' && 'weekId' in postData) {
+    return String(postData.weekId);
+  }
+
+  // Fallback: Redis mapping (for posts created before postData was available)
+  const redisWeekId = await redis.get(`post:${postId}:week_id`);
+  if (redisWeekId) return redisWeekId;
+
+  return null;
+};
+
+/**
+ * Guard that throws if the current post belongs to an expired week.
+ * Legacy posts (no weekId) are allowed unless the weekly system is active.
+ */
+const assertActiveWeek = async (): Promise<void> => {
+  const postWeekId = await resolvePostWeekId();
+  const currentWeekId = getWeekId(new Date());
+
+  if (postWeekId) {
+    if (postWeekId !== currentWeekId) {
+      throw new Error('This game week has ended. Visit the current week\'s post to play.');
+    }
+    return;
+  }
+
+  // No weekId on this post — check if the weekly system is active
+  const weeklySystemActive = await redis.get('first_weekly_post_created');
+  if (weeklySystemActive) {
+    throw new Error('This game week has ended. Visit the current week\'s post to play.');
+  }
+  // Pre-weekly-system legacy post — allow
 };
 
 export const gameRouter = router({
@@ -175,6 +202,8 @@ export const gameRouter = router({
   startRun: publicProcedure
     .input(z.object({ runIndex: z.number().int().min(0).max(2) }))
     .mutation(async ({ input }) => {
+      await assertActiveWeek();
+
       const user = await reddit.getCurrentUser();
       const username = user?.username ?? 'anonymous';
       const now = new Date();
@@ -209,6 +238,8 @@ export const gameRouter = router({
       stepIndex: z.number().int().min(0),
     }))
     .mutation(async ({ input }) => {
+      await assertActiveWeek();
+
       const user = await reddit.getCurrentUser();
       const username = user?.username ?? 'anonymous';
       const now = new Date();
@@ -374,6 +405,66 @@ export const gameRouter = router({
       }));
     }),
 
+    getPostWeekInfo: publicProcedure.query(async () => {
+      const now = new Date();
+      const currentWeekId = getWeekId(now);
+      const postWeekId = await resolvePostWeekId();
+
+      let effectiveWeekId: string;
+      let isActiveWeek: boolean;
+      let isLegacyPost = false;
+
+      if (postWeekId) {
+        effectiveWeekId = postWeekId;
+        isActiveWeek = postWeekId === currentWeekId;
+      } else {
+        // No weekId — check if the weekly system is active
+        const weeklySystemActive = await redis.get('first_weekly_post_created');
+        if (weeklySystemActive) {
+          // Legacy post after weekly system launched — treat as expired
+          effectiveWeekId = 'legacy';
+          isActiveWeek = false;
+          isLegacyPost = true;
+        } else {
+          // Pre-weekly-system — treat as current
+          effectiveWeekId = currentWeekId;
+          isActiveWeek = true;
+          isLegacyPost = true;
+        }
+      }
+
+      // Get active post URL if this post is expired
+      let activePostUrl: string | null = null;
+      if (!isActiveWeek) {
+        const activePostId = await redis.get('active_post_id');
+        if (activePostId) {
+          const cleanId = activePostId.replace('t3_', '');
+          activePostUrl = `https://reddit.com/r/${context.subredditName}/comments/${cleanId}`;
+        }
+      }
+
+      return {
+        postWeekId: effectiveWeekId,
+        currentWeekId,
+        isActiveWeek,
+        isLegacyPost,
+        activePostUrl,
+        weekLabel: effectiveWeekId === 'legacy' ? 'Legacy' : getWeekLabel(effectiveWeekId),
+      };
+    }),
+
+    getFrozenLeaderboard: publicProcedure
+      .input(z.object({ weekId: z.string() }))
+      .query(async ({ input }) => {
+        const topScores = await redis.zRange(
+          `leaderboard:weekly:week:${input.weekId}`, 0, 49, { by: 'rank' }
+        );
+        return topScores.reverse().map((entry: { member: string; score: number }) => ({
+          username: entry.member,
+          score: entry.score,
+        }));
+      }),
+
     getWeeklyBreakdown: publicProcedure.query(async () => {
       const user = await reddit.getCurrentUser();
       const username = user?.username ?? 'anonymous';
@@ -399,7 +490,7 @@ export const gameRouter = router({
 
         return {
           dayId,
-          dayOfWeekName: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][dayOfWeek] ?? 'Unknown',
+          dayOfWeekName: getGameDayLabel(dayOfWeek),
           rawScore,
           multiplier,
           multipliedScore,
@@ -460,7 +551,7 @@ export const gameRouter = router({
 
           return {
             dayId,
-            dayOfWeekName: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][dayOfWeek] ?? 'Unknown',
+            dayOfWeekName: getGameDayLabel(dayOfWeek),
             rawScore,
             multiplier,
             multipliedScore,
@@ -536,7 +627,7 @@ export const gameRouter = router({
           yesterdayDayId,
           weekId,
           dayOfWeek,
-          dayOfWeekName: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][dayOfWeek] ?? 'Unknown',
+          dayOfWeekName: getGameDayLabel(dayOfWeek),
           weekMultiplier: getWeeklyMultiplier(perfectDaysArray.length),
           perfectDaysThisWeek: perfectDaysArray.length,
         },

@@ -7,12 +7,24 @@ import { trpc } from './lib/trpc.js';
 import { HowToPlay } from './components/HowToPlay.js';
 import { WeeklyBreakdown } from './components/WeeklyBreakdown.js';
 import { PlayerBreakdown } from './components/PlayerBreakdown.js';
+import { FrozenWeekView } from './components/FrozenWeekView.js';
 
 const SplashContent = () => {
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.game.getGameState.useQuery();
-  const { data: dailyLeaderboard } = trpc.game.getLeaderboard.useQuery();
-  const { data: weeklyLeaderboard } = trpc.game.getWeeklyLeaderboard.useQuery();
+  const { data: weekInfo, isLoading: weekInfoLoading } = trpc.game.getPostWeekInfo.useQuery();
+  const { data, isLoading } = trpc.game.getGameState.useQuery(undefined, {
+    enabled: weekInfo?.isActiveWeek !== false,
+  });
+  const { data: dailyLeaderboard } = trpc.game.getLeaderboard.useQuery(undefined, {
+    enabled: weekInfo?.isActiveWeek !== false,
+  });
+  const { data: weeklyLeaderboard } = trpc.game.getWeeklyLeaderboard.useQuery(undefined, {
+    enabled: weekInfo?.isActiveWeek !== false,
+  });
+  const { data: frozenLeaderboard } = trpc.game.getFrozenLeaderboard.useQuery(
+    { weekId: weekInfo?.postWeekId ?? '' },
+    { enabled: !!weekInfo && !weekInfo.isActiveWeek && weekInfo.postWeekId !== 'legacy' },
+  );
 
   // Refetch all data when returning from expanded game view
   useEffect(() => {
@@ -34,6 +46,26 @@ const SplashContent = () => {
   });
 
   const currentLeaderboard = leaderboardMode === 'daily' ? dailyLeaderboard : weeklyLeaderboard;
+
+  // Show loading while checking week info
+  if (weekInfoLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-neutral-950 text-white">
+        <div className="text-neutral-500 animate-pulse font-mono">Loading...</div>
+      </div>
+    );
+  }
+
+  // Frozen week — show archived leaderboard + link to current week
+  if (weekInfo && !weekInfo.isActiveWeek) {
+    return (
+      <FrozenWeekView
+        weekLabel={weekInfo.weekLabel}
+        activePostUrl={weekInfo.activePostUrl}
+        leaderboard={frozenLeaderboard}
+      />
+    );
+  }
 
   return (
     <div className={`flex flex-col items-center min-h-screen bg-neutral-950 text-white p-4 ${showLeaderboard ? 'justify-start pt-8' : 'justify-center'}`}>

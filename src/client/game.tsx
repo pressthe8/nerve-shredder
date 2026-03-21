@@ -8,7 +8,10 @@ import { HowToPlay } from './components/HowToPlay.js';
 import { STEP_DISPLAY_MS } from '../shared/scoreEngine.js';
 
 const GameContent = () => {
-  const { data: gameState, refetch } = trpc.game.getGameState.useQuery();
+  const { data: weekInfo } = trpc.game.getPostWeekInfo.useQuery();
+  const { data: gameState, refetch } = trpc.game.getGameState.useQuery(undefined, {
+    enabled: weekInfo?.isActiveWeek !== false,
+  });
   const startRun = trpc.game.startRun.useMutation();
   const bankRun = trpc.game.bankRun.useMutation();
 
@@ -124,6 +127,22 @@ const GameContent = () => {
   useEffect(() => {
     return () => clearRunInterval();
   }, []);
+
+  // Block gameplay on expired posts
+  if (weekInfo && !weekInfo.isActiveWeek) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-neutral-950 text-white p-4">
+        <h2 className="text-2xl font-bold text-neutral-400 mb-4">This game week has ended</h2>
+        <p className="text-neutral-500 mb-8">Visit the current week's post to play.</p>
+        <button
+          onClick={(e) => exitExpandedMode(e.nativeEvent)}
+          className="px-10 py-4 rounded-full bg-neutral-800 text-white font-black hover:bg-neutral-700 active:scale-95 transition-transform"
+        >
+          Close
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex flex-col items-center min-h-screen p-4 transition-colors duration-100 ${phase === 'BUSTED' ? 'bg-red-950/90 animate-[flash_0.2s_ease-in-out,shake_0.5s_ease-in-out]' : 'bg-neutral-950 text-white'}`}>
