@@ -45,13 +45,26 @@ const SplashContent = () => {
     enabled: showDebug,
   });
 
+  // Glitch effect on logo
+  const [glitching, setGlitching] = useState(false);
+  useEffect(() => {
+    const triggerGlitch = () => {
+      setGlitching(true);
+      setTimeout(() => setGlitching(false), 200);
+    };
+    const interval = setInterval(triggerGlitch, 3000 + Math.random() * 4000);
+    return () => clearInterval(interval);
+  }, []);
+
   const currentLeaderboard = leaderboardMode === 'daily' ? dailyLeaderboard : weeklyLeaderboard;
 
   // Show loading while checking week info
   if (weekInfoLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-neutral-950 text-white">
-        <div className="text-neutral-500 animate-pulse font-mono">Loading...</div>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-neutral-950 text-white font-mono cursor-crosshair">
+        <div className="scanline-overlay" />
+        <div className="crt-vignette" />
+        <div className="text-neutral-500 animate-pulse">Loading...</div>
       </div>
     );
   }
@@ -68,13 +81,20 @@ const SplashContent = () => {
   }
 
   return (
-    <div className={`flex flex-col items-center min-h-screen bg-neutral-950 text-white p-3 ${showLeaderboard ? 'justify-start pt-8' : 'justify-center'}`}>
+    <div className={`flex flex-col items-center min-h-screen bg-neutral-950 text-white p-3 font-mono cursor-crosshair relative ${showLeaderboard ? 'justify-start pt-8' : 'justify-center'}`}>
+      {/* CRT Overlays */}
+      <div className="scanline-overlay" />
+      <div className="crt-vignette" />
+      {/* Background Glow Leaks */}
+      <div className="fixed top-[-20%] left-[-10%] w-[60%] h-[60%] bg-red-600/10 rounded-full blur-[150px] pointer-events-none" />
+      <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-cyan-600/5 rounded-full blur-[150px] pointer-events-none" />
+
       {!showLeaderboard ? (
         <>
           {/* Hamburger Menu Button */}
           <button
             onClick={() => setShowHowToPlay(true)}
-            className="absolute top-4 left-4 w-12 h-12 rounded-full bg-neutral-900/80 border border-neutral-700 hover:bg-neutral-800 transition-colors flex items-center justify-center"
+            className="absolute top-4 left-4 w-12 h-12 rounded-full bg-neutral-900/60 backdrop-blur-md border border-neutral-700/50 hover:bg-neutral-800/80 hover:border-neutral-600 transition-colors flex items-center justify-center z-40"
           >
             <svg className="w-6 h-6 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -85,16 +105,22 @@ const SplashContent = () => {
           <HowToPlay isOpen={showHowToPlay} onClose={() => setShowHowToPlay(false)} />
           <WeeklyBreakdown isOpen={showWeeklyBreakdown} onClose={() => setShowWeeklyBreakdown(false)} />
 
-          <img src="/Nerve Shredder 500x500.jpeg" alt="Nerve Shredder" className="w-20 h-20 mb-1 rounded-lg" />
-          <p className="text-neutral-400 mb-2 max-w-xs text-center font-medium text-sm">Push your luck. Bank before the crash.</p>
+          <img
+            src="/Nerve Shredder 500x500.jpeg"
+            alt="Nerve Shredder"
+            className={`w-20 h-20 mb-1 rounded-lg transition-transform duration-100 ${
+              glitching ? 'animate-[glitch-intense_0.2s_ease-in-out]' : ''
+            }`}
+          />
+          <p className="text-neutral-400 mb-2 max-w-xs text-center font-medium text-sm tracking-wider uppercase">Push your luck. Bank before the crash.</p>
 
           {isLoading ? (
-            <div className="text-neutral-500 animate-pulse font-mono">Loading Status...</div>
+            <div className="text-neutral-500 animate-pulse">Loading Status...</div>
           ) : (
             <div className="flex flex-col items-center gap-5 w-full max-w-md">
               {/* Today's Attempts */}
               <div className="w-full">
-                <h3 className="text-neutral-400 text-center text-xs font-bold tracking-wide mb-3">Today's Attempts</h3>
+                <h3 className="text-neutral-400 text-center text-xs font-bold tracking-[.3em] mb-3 uppercase">Today's Attempts</h3>
                 <div className="flex gap-3 justify-center">
                   {[0, 1, 2].map((i) => {
                     const runIndex = data?.runOrder[i];
@@ -104,21 +130,21 @@ const SplashContent = () => {
                     return (
                       <div
                         key={i}
-                        className={`flex-1 rounded-xl p-3 text-center transition-all ${
+                        className={`flex-1 rounded-md p-3 text-center transition-all ${
                           isCompleted && score !== null && score !== undefined && score > 0
-                            ? 'bg-emerald-950/30 border border-emerald-700/50'
+                            ? 'bg-emerald-950/30 border border-emerald-500/40 shadow-[0_0_8px_rgba(52,211,153,0.15)]'
                             : isCompleted && score === 0
-                              ? 'bg-red-950/30 border border-red-700/50'
-                              : 'bg-neutral-900/50 border border-neutral-800'
+                              ? 'bg-red-950/30 border border-red-500/40 shadow-[0_0_8px_rgba(239,68,68,0.15)]'
+                              : 'bg-neutral-900/50 border border-neutral-700/50'
                         }`}
                       >
-                        <div className="text-xs text-neutral-500 font-bold mb-1">{i + 1}</div>
-                        <div className={`text-lg font-mono font-bold ${
+                        <div className="text-xs text-neutral-400 font-bold mb-1 tracking-[.3em]">RUN {i + 1}</div>
+                        <div className={`text-lg font-mono font-black italic tracking-tighter ${
                           score !== null && score !== undefined && score > 0
-                            ? 'text-emerald-400'
+                            ? 'text-emerald-400 text-glow-emerald'
                             : score === 0
-                              ? 'text-neutral-600'
-                              : 'text-neutral-700'
+                              ? 'text-neutral-500'
+                              : 'text-neutral-500'
                         }`}>
                           {score !== null && score !== undefined ? `£${score}` : '---'}
                         </div>
@@ -130,17 +156,17 @@ const SplashContent = () => {
 
               {/* Today's Total + This Week's Total side by side */}
               <div className="flex gap-3 w-full">
-                <div className="flex-1 bg-neutral-900/50 border border-neutral-800 rounded-xl p-4 text-center">
-                  <h2 className="text-neutral-500 text-xs font-bold uppercase tracking-widest mb-1">Today's Total</h2>
-                  <div className="text-2xl font-mono font-bold text-cyan-400">£{data?.totalScore ?? 0}</div>
+                <div className="flex-1 bg-neutral-900/40 border border-neutral-700/50 rounded-md p-4 text-center backdrop-blur-sm">
+                  <h2 className="text-neutral-400 text-xs font-bold uppercase tracking-[.3em] mb-1">Today's Total</h2>
+                  <div className="text-2xl font-mono font-black italic tracking-tighter text-cyan-400 text-glow-cyan">£{data?.totalScore ?? 0}</div>
                 </div>
                 {data && data.weeklyScore > 0 && (
                   <button
                     onClick={() => setShowWeeklyBreakdown(true)}
-                    className="flex-1 bg-gradient-to-br from-amber-950/40 to-amber-900/20 border border-amber-700/30 rounded-xl p-4 text-center hover:from-amber-950/50 hover:to-amber-900/30 transition-colors"
+                    className="flex-1 bg-gradient-to-br from-amber-950/40 to-amber-900/20 border border-amber-600/30 rounded-md p-4 text-center hover:from-amber-950/50 hover:to-amber-900/30 transition-colors shadow-[0_0_12px_rgba(251,191,36,0.1)]"
                   >
-                    <h3 className="text-neutral-500 text-xs font-bold uppercase tracking-widest mb-1">This Week's Total</h3>
-                    <div className="text-2xl font-mono font-black text-amber-400">£{data.weeklyScore.toLocaleString()}</div>
+                    <h3 className="text-neutral-400 text-xs font-bold uppercase tracking-[.3em] mb-1">This Week</h3>
+                    <div className="text-2xl font-mono font-black italic tracking-tighter text-amber-400 text-glow-amber">£{data.weeklyScore.toLocaleString()}</div>
                     {data.weekPerfectDays > 0 && (
                       <div className="mt-1 text-xs text-amber-300/80">
                         {data.weekPerfectDays}/7 Perfect Days
@@ -152,18 +178,20 @@ const SplashContent = () => {
 
               {data?.runsCompleted.includes(false) ? (
                 <button
-                  className="bg-red-600 hover:bg-red-500 transition-all duration-200 text-white font-black text-lg py-4 px-10 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.4)] active:scale-95 active:shadow-none"
+                  className="bg-red-600 hover:bg-red-500 transition-all duration-200 text-white font-black text-lg py-4 px-12 skew-x-[-12deg] shadow-[0_0_30px_rgba(220,38,38,0.5)] hover:shadow-[0_0_40px_rgba(220,38,38,0.7)] active:scale-95"
                   onClick={(e) => requestExpandedMode(e.nativeEvent, 'game')}
                 >
-                  PLAY NEXT RUN
+                  <span className="inline-block skew-x-[12deg] tracking-wider">PLAY NEXT RUN</span>
                 </button>
               ) : (
-                <div className="text-cyan-500 font-bold bg-cyan-500/10 px-6 py-3 rounded-full border border-cyan-500/20">All runs completed for today!</div>
+                <div className="text-cyan-400 font-bold bg-cyan-500/10 px-8 py-3 skew-x-[-12deg] border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.15)]">
+                  <span className="inline-block skew-x-[12deg] tracking-wider text-sm">ALL RUNS COMPLETED</span>
+                </div>
               )}
 
               <button
                 onClick={() => setShowLeaderboard(true)}
-                className="text-neutral-400 hover:text-white transition-colors text-sm font-bold flex items-center gap-2"
+                className="text-neutral-400 hover:text-white transition-colors text-xs font-bold flex items-center gap-2 tracking-[.2em] uppercase"
               >
                 🏆 View Leaderboard
               </button>
@@ -223,7 +251,7 @@ const SplashContent = () => {
 
               {/* Debug Panel - Remove before production */}
               {showDebug && debugData && (
-                <div className="w-full bg-neutral-900/80 border border-neutral-700 rounded-xl p-4 text-left font-mono text-xs overflow-auto max-h-96">
+                <div className="w-full bg-neutral-900/80 border border-neutral-700 rounded-md p-4 text-left text-xs overflow-auto max-h-96">
                   <div className="flex justify-between items-center mb-3">
                     <h4 className="text-purple-400 font-bold text-sm">Redis Debug Inspector</h4>
                     <button
@@ -284,8 +312,8 @@ const SplashContent = () => {
       ) : (
         <div className="w-full max-w-md">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-              🏆 Leaderboard
+            <h2 className="text-2xl font-black italic tracking-tighter flex items-center gap-2">
+              🏆 LEADERBOARD
             </h2>
             <button
               onClick={() => setShowLeaderboard(false)}
@@ -299,29 +327,29 @@ const SplashContent = () => {
           <div className="flex gap-2 mb-6">
             <button
               onClick={() => setLeaderboardMode('daily')}
-              className={`flex-1 py-3 rounded-xl font-bold transition-all ${
+              className={`flex-1 py-3 font-bold transition-all tracking-wider text-sm skew-x-[-8deg] ${
                 leaderboardMode === 'daily'
-                  ? 'bg-cyan-600 text-white shadow-lg'
+                  ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(34,211,238,0.3)]'
                   : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
               }`}
             >
-              Daily
+              <span className="inline-block skew-x-[8deg]">DAILY</span>
             </button>
             <button
               onClick={() => setLeaderboardMode('weekly')}
-              className={`flex-1 py-3 rounded-xl font-bold transition-all ${
+              className={`flex-1 py-3 font-bold transition-all tracking-wider text-sm skew-x-[-8deg] ${
                 leaderboardMode === 'weekly'
-                  ? 'bg-amber-600 text-white shadow-lg'
+                  ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(251,191,36,0.3)]'
                   : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
               }`}
             >
-              Weekly
+              <span className="inline-block skew-x-[8deg]">WEEKLY</span>
             </button>
           </div>
 
           {/* Leaderboard List */}
           <div className="space-y-2">
-            <h3 className="text-neutral-400 text-sm font-bold text-center mb-4">
+            <h3 className="text-neutral-400 text-xs font-bold text-center mb-4 tracking-[.3em] uppercase">
               {leaderboardMode === 'daily' ? "Today's Top Players" : "This Week's Top Players"}
             </h3>
             {currentLeaderboard && currentLeaderboard.length > 0 ? (
@@ -329,7 +357,7 @@ const SplashContent = () => {
                 <button
                   key={entry.username}
                   onClick={() => setSelectedPlayer(entry.username)}
-                  className={`flex items-center justify-between p-4 rounded-xl w-full text-left hover:brightness-110 transition-all ${
+                  className={`flex items-center justify-between p-4 rounded-md w-full text-left hover:brightness-110 transition-all ${
                     index === 0
                       ? 'bg-yellow-950/30 border border-yellow-700/50'
                       : index === 1
@@ -340,7 +368,7 @@ const SplashContent = () => {
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`text-2xl font-bold ${
+                    <div className={`text-2xl font-black italic tracking-tighter ${
                       index === 0 ? 'text-yellow-400' : index === 1 ? 'text-neutral-300' : index === 2 ? 'text-orange-600' : 'text-neutral-500'
                     }`}>
                       #{index + 1}
@@ -349,11 +377,11 @@ const SplashContent = () => {
                       {index === 0 && <span className="text-xl">🏆</span>}
                       {index === 1 && <span className="text-xl">🥈</span>}
                       {index === 2 && <span className="text-xl">🥉</span>}
-                      <span className="font-bold text-white">{entry.username}</span>
+                      <span className="font-bold text-white tracking-wide">{entry.username}</span>
                     </div>
                   </div>
-                  <div className={`text-xl font-mono font-bold ${
-                    leaderboardMode === 'daily' ? 'text-cyan-400' : 'text-amber-400'
+                  <div className={`text-xl font-mono font-black italic tracking-tighter ${
+                    leaderboardMode === 'daily' ? 'text-cyan-400 text-glow-cyan' : 'text-amber-400 text-glow-amber'
                   }`}>
                     ${entry.score.toLocaleString()}
                   </div>

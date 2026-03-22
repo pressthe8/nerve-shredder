@@ -16,10 +16,10 @@ export const PlayerBreakdown = ({ isOpen, onClose, username, mode }: PlayerBreak
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-      <div className="bg-neutral-900 rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-neutral-900 border-b border-neutral-800 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-white">{username}</h2>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+      <div className="bg-neutral-900/95 backdrop-blur-md rounded-md max-w-md w-full max-h-[90vh] overflow-y-auto border border-neutral-700/50 font-mono">
+        <div className="sticky top-0 bg-neutral-900/95 backdrop-blur-md border-b border-neutral-700/50 px-6 py-4 flex items-center justify-between">
+          <h2 className="text-xl font-black italic tracking-tighter text-white">{username}</h2>
           <button
             onClick={onClose}
             className="text-neutral-400 hover:text-white transition-colors text-2xl font-bold w-8 h-8 flex items-center justify-center"
@@ -36,23 +36,23 @@ export const PlayerBreakdown = ({ isOpen, onClose, username, mode }: PlayerBreak
           ) : data.mode === 'daily' ? (
             /* Daily: Show 3 run cards */
             <>
-              <h3 className="text-neutral-400 text-xs font-bold tracking-wider text-center mb-3">Today's Runs</h3>
+              <h3 className="text-neutral-400 text-xs font-bold tracking-[.3em] text-center mb-3 uppercase">Today's Runs</h3>
               <div className="flex gap-3 mb-4">
                 {data.runs.map((run) => (
                   <div
                     key={run.runIndex}
-                    className={`flex-1 rounded-xl p-4 text-center ${
+                    className={`flex-1 rounded-md p-4 text-center ${
                       run.score !== null && run.score > 0
-                        ? 'bg-emerald-950/30 border border-emerald-700/50'
+                        ? 'bg-emerald-950/30 border border-emerald-500/40 shadow-[0_0_8px_rgba(52,211,153,0.15)]'
                         : run.score === 0
-                          ? 'bg-red-950/30 border border-red-700/50'
-                          : 'bg-neutral-900/50 border border-neutral-800'
+                          ? 'bg-red-950/30 border border-red-500/40 shadow-[0_0_8px_rgba(239,68,68,0.15)]'
+                          : 'bg-neutral-900/50 border border-neutral-700/50'
                     }`}
                   >
-                    <div className="text-xs text-neutral-500 font-bold mb-1">{run.runIndex + 1}</div>
-                    <div className={`text-xl font-mono font-bold ${
+                    <div className="text-xs text-neutral-400 font-bold mb-1 tracking-[.3em]">RUN {run.runIndex + 1}</div>
+                    <div className={`text-xl font-mono font-black italic tracking-tighter ${
                       run.score !== null && run.score > 0
-                        ? 'text-emerald-400'
+                        ? 'text-emerald-400 text-glow-emerald'
                         : run.score === 0
                           ? 'text-red-400'
                           : 'text-neutral-700'
@@ -64,8 +64,8 @@ export const PlayerBreakdown = ({ isOpen, onClose, username, mode }: PlayerBreak
               </div>
               <div className="border-t border-neutral-700 pt-3">
                 <div className="flex justify-between items-center px-3">
-                  <div className="text-sm font-bold text-neutral-400">Total</div>
-                  <div className="text-xl font-mono font-black text-emerald-400">
+                  <div className="text-xs font-bold text-neutral-400 tracking-[.3em] uppercase">Total</div>
+                  <div className="text-xl font-mono font-black italic tracking-tighter text-emerald-400 text-glow-emerald">
                     £{data.totalScore}
                   </div>
                 </div>
@@ -74,7 +74,7 @@ export const PlayerBreakdown = ({ isOpen, onClose, username, mode }: PlayerBreak
           ) : (
             /* Weekly: Show day-by-day breakdown */
             <>
-              <h3 className="text-neutral-400 text-xs font-bold tracking-wider text-center mb-3">This Week</h3>
+              <h3 className="text-neutral-400 text-xs font-bold tracking-[.3em] text-center mb-3 uppercase">This Week</h3>
               {data.days.length === 0 ? (
                 <div className="text-neutral-500 text-center py-4">No scores this week.</div>
               ) : (
@@ -83,7 +83,7 @@ export const PlayerBreakdown = ({ isOpen, onClose, username, mode }: PlayerBreak
                     {data.days.map((day) => (
                       <div
                         key={day.dayId}
-                        className={`flex items-center justify-between p-3 rounded-xl ${
+                        className={`flex items-center justify-between p-3 rounded-md ${
                           day.isPerfectDay
                             ? 'bg-emerald-950/30 border border-emerald-700/50'
                             : 'bg-neutral-800/50 border border-neutral-700/50'
@@ -100,7 +100,7 @@ export const PlayerBreakdown = ({ isOpen, onClose, username, mode }: PlayerBreak
                               {day.multiplier.toFixed(1)}x
                             </span>
                           )}
-                          <span className="text-sm font-mono font-bold text-orange-400 w-16 text-right">
+                          <span className="text-sm font-mono font-black italic tracking-tighter text-orange-400 w-16 text-right">
                             £{day.multipliedScore}
                           </span>
                         </div>
@@ -109,8 +109,8 @@ export const PlayerBreakdown = ({ isOpen, onClose, username, mode }: PlayerBreak
                   </div>
                   <div className="border-t border-neutral-700 pt-3">
                     <div className="flex justify-between items-center px-3">
-                      <div className="text-sm font-bold text-neutral-400">Weekly Total</div>
-                      <div className="text-xl font-mono font-black text-orange-400">
+                      <div className="text-xs font-bold text-neutral-400 tracking-[.3em] uppercase">Weekly Total</div>
+                      <div className="text-xl font-mono font-black italic tracking-tighter text-orange-400 text-glow-amber">
                         £{data.totalMultiplied}
                       </div>
                     </div>
