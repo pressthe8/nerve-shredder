@@ -196,6 +196,7 @@ const SplashContent = () => {
                 🏆 View Leaderboard
               </button>
 
+              {data?.username === 'rugby_j' && (<>
               {/* Testing Controls - Remove before production */}
               <div className="mt-20" />
               <div className="flex gap-2 mt-4">
@@ -306,6 +307,7 @@ const SplashContent = () => {
                   </div>
                 </div>
               )}
+              </>)}
             </div>
           )}
         </>

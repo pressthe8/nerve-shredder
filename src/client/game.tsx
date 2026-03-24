@@ -277,9 +277,9 @@ const GameContent = () => {
           <div className="text-center animate-in fade-in duration-500">
              <h2 className="text-2xl font-black italic tracking-tighter text-neutral-400 mb-6">Daily Runs Complete</h2>
              <div className="text-6xl font-mono font-black italic text-cyan-400 mb-4 tracking-tighter drop-shadow-2xl text-glow-cyan">£{gameState?.totalScore.toLocaleString()}</div>
-             {gameState && gameState.lifetimePerfectDays > 0 && (
+             {gameState && gameState.runScores.every(s => s !== null && s > 0) && (
                <div className="mt-4 mb-6 text-cyan-400 font-bold text-lg">
-                 🔥 {gameState.lifetimePerfectDays} Perfect Days Total
+                 🔥 Perfect Day!
                </div>
              )}
 
