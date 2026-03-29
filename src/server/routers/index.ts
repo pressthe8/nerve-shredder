@@ -60,6 +60,16 @@ const getDailyRuns = async (dayId: string): Promise<ServerRun[]> => {
 
 const LATENCY_BUFFER_MS = 1000; // 1 second buffer for latency
 
+/** Check if a player has completed all 3 daily runs (score exists for each). */
+const hasCompletedAllRuns = async (username: string, dayId: string): Promise<boolean> => {
+  const scores = await Promise.all([
+    redis.get(`user:${username}:day:${dayId}:run:0:score`),
+    redis.get(`user:${username}:day:${dayId}:run:1:score`),
+    redis.get(`user:${username}:day:${dayId}:run:2:score`),
+  ]);
+  return scores.every(s => s !== null && s !== undefined && s !== '');
+};
+
 // Get weekly multiplier based on perfect days earned this week
 const getWeeklyMultiplier = (perfectDayCount: number): number => {
   const multipliers = [1.0, 1.1, 1.2, 1.3, 1.4, 1.4, 1.5];
@@ -322,6 +332,18 @@ export const gameRouter = router({
       // Update weekly leaderboard
       const weekId = getWeekId(now);
 
+      // Snapshot weekly leaderboard before any today updates (lazy: once per day)
+      const snapshotKey = `leaderboard:weekly:week:${weekId}:snapshot_day:${dayId}`;
+      const snapshotExists = await redis.get(snapshotKey);
+      if (!snapshotExists) {
+        const currentTopScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 49, { by: 'rank' });
+        const snapshotEntries = currentTopScores.reverse().map((e: { member: string; score: number }) => ({
+          username: e.member,
+          score: e.score,
+        }));
+        await redis.set(snapshotKey, JSON.stringify(snapshotEntries));
+      }
+
       const currentPerfectDaysStr = await redis.get(`user:${username}:week:${weekId}:perfect_days`);
       const currentPerfectDaysCount = currentPerfectDaysStr ? JSON.parse(currentPerfectDaysStr as string).length : 0;
       const multiplier = getWeeklyMultiplier(currentPerfectDaysCount);
@@ -383,26 +405,64 @@ export const gameRouter = router({
       const epochStart = new Date('2024-01-01T00:00:00Z');
       const dayId = Math.floor((now.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24)).toString();
 
-      // Get top scores in descending order (highest first)
+      // Lock: only show daily leaderboard after the player completes all 3 runs
+      const user = await reddit.getCurrentUser();
+      const username = user?.username ?? 'anonymous';
+      const completed = await hasCompletedAllRuns(username, dayId);
+
+      if (!completed) {
+        return { locked: true as const, entries: [] };
+      }
+
       const topScores = await redis.zRange(`leaderboard:daily:day:${dayId}`, 0, 49, { by: 'rank' });
-      // Reverse the array since zRange returns ascending order
-      return topScores.reverse().map((entry: { member: string; score: number }) => ({
-        username: entry.member,
-        score: entry.score
-      }));
+      return {
+        locked: false as const,
+        entries: topScores.reverse().map((entry: { member: string; score: number }) => ({
+          username: entry.member,
+          score: entry.score,
+        })),
+      };
     }),
 
     getWeeklyLeaderboard: publicProcedure.query(async () => {
       const now = new Date();
+      const epochStart = new Date('2024-01-01T00:00:00Z');
+      const dayId = Math.floor((now.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24)).toString();
       const weekId = getWeekId(now);
+      const dayOfWeek = getDayOfWeek(now);
 
-      // Get top scores in descending order (highest first)
+      const user = await reddit.getCurrentUser();
+      const username = user?.username ?? 'anonymous';
+      const completed = await hasCompletedAllRuns(username, dayId);
+
+      if (!completed) {
+        // Serve the previous-day snapshot so players can see where they stand
+        const snapshotKey = `leaderboard:weekly:week:${weekId}:snapshot_day:${dayId}`;
+        const snapshotData = await redis.get(snapshotKey);
+        if (snapshotData) {
+          const entries = JSON.parse(snapshotData) as Array<{ username: string; score: number }>;
+          return {
+            locked: false as const,
+            snapshot: true as const,
+            snapshotDayLabel: dayOfWeek === 0 ? null : getGameDayLabel(dayOfWeek - 1),
+            entries,
+          };
+        }
+        // No snapshot yet (first day of week or nobody has played today)
+        return { locked: false as const, snapshot: false as const, snapshotDayLabel: null, entries: [] };
+      }
+
+      // Player completed all runs — show live data
       const topScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 49, { by: 'rank' });
-      // Reverse the array since zRange returns ascending order
-      return topScores.reverse().map((entry: { member: string; score: number }) => ({
-        username: entry.member,
-        score: entry.score
-      }));
+      return {
+        locked: false as const,
+        snapshot: false as const,
+        snapshotDayLabel: null,
+        entries: topScores.reverse().map((entry: { member: string; score: number }) => ({
+          username: entry.member,
+          score: entry.score,
+        })),
+      };
     }),
 
     getPostWeekInfo: publicProcedure.query(async () => {
@@ -512,6 +572,18 @@ export const gameRouter = router({
       .query(async ({ input }) => {
         const now = new Date();
         const epochStart = new Date('2024-01-01T00:00:00Z');
+
+        // Guard: requesting player must have completed all runs to view daily breakdowns
+        if (input.mode === 'daily') {
+          const dayId = Math.floor((now.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24)).toString();
+          const requestingUser = await reddit.getCurrentUser();
+          const requestingUsername = requestingUser?.username ?? 'anonymous';
+          const completed = await hasCompletedAllRuns(requestingUsername, dayId);
+          if (!completed) {
+            throw new Error('Complete all 3 runs to view player breakdowns');
+          }
+        }
+
         const { username, mode } = input;
 
         if (mode === 'daily') {

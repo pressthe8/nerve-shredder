@@ -56,7 +56,11 @@ const SplashContent = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const currentLeaderboard = leaderboardMode === 'daily' ? dailyLeaderboard : weeklyLeaderboard;
+  const currentLeaderboardData = leaderboardMode === 'daily' ? dailyLeaderboard : weeklyLeaderboard;
+  const isLeaderboardLocked = leaderboardMode === 'daily' && (dailyLeaderboard?.locked ?? false);
+  const isWeeklySnapshot = leaderboardMode === 'weekly' && (weeklyLeaderboard?.snapshot ?? false);
+  const snapshotDayLabel = weeklyLeaderboard?.snapshotDayLabel;
+  const currentLeaderboard = currentLeaderboardData?.entries;
 
   // Show loading while checking week info
   if (weekInfoLoading) {
@@ -352,9 +356,67 @@ const SplashContent = () => {
           {/* Leaderboard List */}
           <div className="space-y-2">
             <h3 className="text-neutral-400 text-xs font-bold text-center mb-4 tracking-[.3em] uppercase">
-              {leaderboardMode === 'daily' ? "Today's Top Players" : "This Week's Top Players"}
+              {leaderboardMode === 'daily'
+                ? "Today's Top Players"
+                : isWeeklySnapshot && snapshotDayLabel
+                  ? `Top Players after ${snapshotDayLabel}`
+                  : "This Week's Top Players"}
             </h3>
-            {currentLeaderboard && currentLeaderboard.length > 0 ? (
+            {isLeaderboardLocked ? (
+              <div className="text-center py-12 px-4">
+                <div className="text-4xl mb-4">🔒</div>
+                <div className="text-neutral-300 font-bold text-sm mb-2 tracking-wider uppercase">
+                  Leaderboard Locked
+                </div>
+                <div className="text-neutral-500 text-sm max-w-xs mx-auto">
+                  Complete your 3 daily runs to reveal today's standings.
+                </div>
+              </div>
+            ) : isWeeklySnapshot && snapshotDayLabel ? (
+              <>
+                <div className="text-center text-neutral-500 text-xs mb-4 italic">
+                  Standings before today's play — complete your runs to see live results.
+                </div>
+                {currentLeaderboard && currentLeaderboard.length > 0 ? (
+                  currentLeaderboard.map((entry: { username: string; score: number }, index: number) => (
+                    <button
+                      key={entry.username}
+                      onClick={() => setSelectedPlayer(entry.username)}
+                      className={`flex items-center justify-between p-4 rounded-md w-full text-left hover:brightness-110 transition-all ${
+                        index === 0
+                          ? 'bg-yellow-950/30 border border-yellow-700/50'
+                          : index === 1
+                            ? 'bg-neutral-800/50 border border-neutral-700'
+                            : index === 2
+                              ? 'bg-orange-950/30 border border-orange-900/50'
+                              : 'bg-neutral-900/30 border border-neutral-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`text-2xl font-black italic tracking-tighter ${
+                          index === 0 ? 'text-yellow-400' : index === 1 ? 'text-neutral-300' : index === 2 ? 'text-orange-600' : 'text-neutral-500'
+                        }`}>
+                          #{index + 1}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {index === 0 && <span className="text-xl">🏆</span>}
+                          {index === 1 && <span className="text-xl">🥈</span>}
+                          {index === 2 && <span className="text-xl">🥉</span>}
+                          <span className="font-bold text-white tracking-wide">{entry.username}</span>
+                        </div>
+                      </div>
+                      <div className="text-xl font-mono font-black italic tracking-tighter text-amber-400 text-glow-amber">
+                        ${entry.score.toLocaleString()}
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="text-center text-neutral-500 py-8">
+                    No scores yet. Be the first!
+                  </div>
+                )}
+              </>
+            ) : currentLeaderboard && currentLeaderboard.length > 0 ? (
               currentLeaderboard.map((entry: { username: string; score: number }, index: number) => (
                 <button
                   key={entry.username}
@@ -397,7 +459,7 @@ const SplashContent = () => {
           </div>
 
           {/* Player Breakdown Modal */}
-          {selectedPlayer && (
+          {selectedPlayer && !isLeaderboardLocked && (
             <PlayerBreakdown
               isOpen={true}
               onClose={() => setSelectedPlayer(null)}
