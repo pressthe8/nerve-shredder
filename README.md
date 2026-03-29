@@ -1,27 +1,42 @@
-## Devvit React Starter
+# Nerve Shredder
 
-A starter to build web applications on Reddit's developer platform
+A daily nerve-testing game for Reddit. Can you keep your cool and bank at the right moment?
 
-- [Devvit](https://developers.reddit.com/): A way to build and deploy immersive games on Reddit
-- [Vite](https://vite.dev/): For compiling the webView
-- [React](https://react.dev/): For UI
-- [Hono](https://hono.dev/): For backend logic
-- [Tailwind](https://tailwindcss.com/): For styles
-- [TypeScript](https://www.typescriptlang.org/): For type safety
+Play at [r/NerveShredder](https://www.reddit.com/r/NerveShredder/).
 
-## Getting Started
+## How to play
 
-> Make sure you have Node 22 downloaded on your machine before running!
+Each day you get **3 runs**. In each run, a sequence of £ amounts ticks up on screen — one per second. Your job is simple: hit **BANK** before the sequence ends to lock in the current amount.
 
-1. Run `npm create devvit@latest --template=react`
-2. Go through the installation wizard. You will need to create a Reddit account and connect it to Reddit developers
-3. Copy the command on the success page into your terminal
+- Wait too long and you **bust** — scoring £0 for that run
+- Bank too early and you leave money on the table
+- Your score for each run is whatever amount was showing when you banked
 
-## Commands
+Your **daily total** is the sum of all 3 runs. Play all 3 to unlock the leaderboard.
 
-- `npm run dev`: Starts a development server where you can develop your application live on Reddit.
-- `npm run build`: Builds your client and server projects
-- `npm run deploy`: Uploads a new version of your app
-- `npm run launch`: Publishes your app for review
-- `npm run login`: Logs your CLI into Reddit
-- `npm run type-check`: Type checks, lints, and prettifies your app
+## Weekly multipliers
+
+Complete all 3 runs without busting to earn a **Perfect Day**. Each Perfect Day you earn within a game week increases your multiplier — starting at 1.0× and climbing up to 1.5×. The multiplier applies to each day's total as you earn it, so chaining Perfect Days across the week significantly boosts your weekly score.
+
+## Leaderboards
+
+- **Daily leaderboard** — unlocks once you've completed all 3 runs for the day
+- **Weekly leaderboard** — shows multiplied totals across the whole week
+
+## For moderators
+
+### Installing the app
+
+1. Install Nerve Shredder from the [Reddit App Directory](https://developers.reddit.com/apps/nerve-shredder)
+2. A weekly post will be created automatically on install
+3. New posts are created every Monday at 00:00 UTC via a scheduled job
+
+### Creating a post manually
+
+Use the **"Create a new post"** option from the subreddit menu (three-dot menu → nerve-shredder → Create a new post). Moderator access required.
+
+### Notes
+
+- Each subreddit has its own isolated leaderboard — scores don't cross between communities
+- Players get exactly 3 runs per day; the sequence is the same for all players on a given day
+- Posts from previous weeks show a frozen leaderboard snapshot from that week

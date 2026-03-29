@@ -32,18 +32,11 @@ const SplashContent = () => {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [utils]);
-  const clearDaily = trpc.game.clearDailyStats.useMutation();
-  const clearWeekly = trpc.game.clearWeeklyStats.useMutation();
-  const clearAll = trpc.game.clearAllStats.useMutation();
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboardMode, setLeaderboardMode] = useState<'daily' | 'weekly'>('daily');
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [showWeeklyBreakdown, setShowWeeklyBreakdown] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
-  const [showDebug, setShowDebug] = useState(false);
-  const { data: debugData, refetch: refetchDebug } = trpc.game.debugInspect.useQuery(undefined, {
-    enabled: showDebug,
-  });
 
   // Glitch effect on logo
   const [glitching, setGlitching] = useState(false);
@@ -200,118 +193,6 @@ const SplashContent = () => {
                 🏆 View Leaderboard
               </button>
 
-              {data?.username === 'rugby_j' && (<>
-              {/* Testing Controls - Remove before production */}
-              <div className="mt-20" />
-              <div className="flex gap-2 mt-4">
-                <button
-                  onClick={async () => {
-                    try {
-                      const result = await clearDaily.mutateAsync();
-                      console.log('[Clear Daily]', result);
-                    } catch (e) {
-                      console.error('[Clear Daily] Error:', e);
-                    }
-                    window.location.reload();
-                  }}
-                  className="text-xs px-3 py-1 rounded bg-yellow-900/30 border border-yellow-700/50 text-yellow-400 hover:bg-yellow-900/50 transition-colors"
-                >
-                  Clear Daily
-                </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      const result = await clearWeekly.mutateAsync();
-                      console.log('[Clear Weekly]', result);
-                    } catch (e) {
-                      console.error('[Clear Weekly] Error:', e);
-                    }
-                    window.location.reload();
-                  }}
-                  className="text-xs px-3 py-1 rounded bg-orange-900/30 border border-orange-700/50 text-orange-400 hover:bg-orange-900/50 transition-colors"
-                >
-                  Clear Weekly
-                </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      const result = await clearAll.mutateAsync();
-                      console.log('[Clear All]', result);
-                    } catch (e) {
-                      console.error('[Clear All] Error:', e);
-                    }
-                    window.location.reload();
-                  }}
-                  className="text-xs px-3 py-1 rounded bg-red-900/30 border border-red-700/50 text-red-400 hover:bg-red-900/50 transition-colors"
-                >
-                  Clear All
-                </button>
-                <button
-                  onClick={() => setShowDebug(!showDebug)}
-                  className="text-xs px-3 py-1 rounded bg-purple-900/30 border border-purple-700/50 text-purple-400 hover:bg-purple-900/50 transition-colors"
-                >
-                  {showDebug ? 'Hide Debug' : 'Debug'}
-                </button>
-              </div>
-
-              {/* Debug Panel - Remove before production */}
-              {showDebug && debugData && (
-                <div className="w-full bg-neutral-900/80 border border-neutral-700 rounded-md p-4 text-left text-xs overflow-auto max-h-96">
-                  <div className="flex justify-between items-center mb-3">
-                    <h4 className="text-purple-400 font-bold text-sm">Redis Debug Inspector</h4>
-                    <button
-                      onClick={() => void refetchDebug()}
-                      className="text-xs px-2 py-1 rounded bg-purple-800/50 text-purple-300 hover:bg-purple-700/50"
-                    >
-                      Refresh
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <div className="text-neutral-400 font-bold mb-1">Meta</div>
-                      <div className="text-neutral-300">User: {debugData.meta.username}</div>
-                      <div className="text-neutral-300">Server Time: {debugData.meta.serverTime}</div>
-                      <div className="text-neutral-300">Day ID: {debugData.meta.dayId} | Week ID: {debugData.meta.weekId}</div>
-                      <div className="text-neutral-300">Day: {debugData.meta.dayOfWeekName}</div>
-                    </div>
-                    <div>
-                      <div className="text-emerald-400 font-bold mb-1">Today (Day {debugData.meta.dayId})</div>
-                      {([0, 1, 2] as const).map(i => {
-                        const run = debugData.today.runs[`run${i}` as keyof typeof debugData.today.runs];
-                        const config = debugData.today.runConfigs?.[i];
-                        return (
-                          <div key={i} className="text-neutral-300">
-                            <div>Run {i}: score={String(run.score ?? 'undefined')} startTime={String(run.startTime ?? 'undefined')}</div>
-                            {config && (
-                              <div className="text-neutral-500 ml-4">
-                                inc=[{config.baseIncrementRange.join(',')}] jump={config.jumpChance} dip={config.dipChance} spike={config.initialSpikeChance}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                      <div className="text-neutral-300">Totals: score={String(debugData.today.totals.score ?? 'undefined')} runOrder={String(debugData.today.totals.runOrder ?? 'undefined')}</div>
-                      <div className="text-neutral-300">Daily LB: {String(debugData.today.dailyLeaderboardScore ?? 'undefined')}</div>
-                    </div>
-                    <div>
-                      <div className="text-yellow-400 font-bold mb-1">Yesterday (Day {debugData.meta.yesterdayDayId})</div>
-                      <div className="text-neutral-300">Total: {String(debugData.yesterday.totalScore ?? 'undefined')}</div>
-                      <div className="text-neutral-300">RunOrder: {String(debugData.yesterday.runOrder ?? 'undefined')}</div>
-                    </div>
-                    <div>
-                      <div className="text-orange-400 font-bold mb-1">Weekly (Week {debugData.meta.weekId})</div>
-                      <div className="text-neutral-300">Perfect Days ({debugData.meta.perfectDaysThisWeek}): {String(debugData.weekly.perfectDays ?? 'undefined')}</div>
-                      <div className="text-neutral-300">Current Multiplier: {debugData.meta.weekMultiplier}x</div>
-                      <div className="text-neutral-300">Daily Scores (raw): {JSON.stringify(debugData.weekly.dailyScores)}</div>
-                      <div className="text-neutral-300">Daily Scores (mult): {JSON.stringify(debugData.weekly.dailyScoresMultiplied)}</div>
-                      <div className="text-neutral-300">Daily Multipliers: {JSON.stringify(debugData.weekly.dailyMultipliers)}</div>
-                      <div className="text-neutral-300">Weekly LB: {String(debugData.weekly.weeklyLeaderboardScore ?? 'undefined')}</div>
-                      <div className="text-neutral-300">Lifetime Perfect Days: {String(debugData.weekly.lifetimePerfectDays ?? 'undefined')}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              </>)}
             </div>
           )}
         </>

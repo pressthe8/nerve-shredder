@@ -26,6 +26,21 @@ const GameContent = () => {
   const stepIndexRef = useRef<number>(0);
   const sequenceRef = useRef<number[]>([]);
   const bankingRef = useRef(false);
+  const soundsRef = useRef<Record<string, HTMLAudioElement>>({});
+
+  const getSound = useCallback((name: 'tick' | 'bank' | 'bust') => {
+    if (!soundsRef.current[name]) {
+      soundsRef.current[name] = new Audio(`/${name}.mp3`);
+    }
+    return soundsRef.current[name];
+  }, []);
+
+  const playSound = useCallback((name: 'tick' | 'bank' | 'bust') => {
+    const audio = getSound(name);
+    console.log('playSound', name, 'src:', audio.src, 'readyState:', audio.readyState, 'paused:', audio.paused);
+    audio.currentTime = 0;
+    audio.play().then(() => console.log('playing', name)).catch((e) => console.warn('Audio play failed:', name, e));
+  }, [getSound]);
 
   const clearRunInterval = () => {
     if (intervalRef.current !== null) {
@@ -57,9 +72,11 @@ const GameContent = () => {
       const res = await bankRun.mutateAsync({ runIndex, stepIndex });
 
       if (res.bust) {
+        playSound('bust');
         setPhase('BUSTED');
         setPercentile(null);
       } else {
+        playSound('bank');
         setPhase('BANKED');
         setAmount(res.finalScore);
         setPercentile(res.percentile ?? null);
@@ -71,6 +88,7 @@ const GameContent = () => {
       void refetch();
     } catch (e) {
       console.error(e);
+      playSound('bust');
       setPhase('BUSTED');
     } finally {
       bankingRef.current = false;
@@ -102,6 +120,7 @@ const GameContent = () => {
         }
         stepIndexRef.current = nextStep;
         setAmount(sequence[nextStep] ?? 0);
+        playSound('tick');
       }, STEP_DISPLAY_MS);
 
       intervalRef.current = interval;

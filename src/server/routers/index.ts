@@ -226,9 +226,11 @@ export const gameRouter = router({
         throw new Error("Run already completed");
       }
 
-      // Record start time
+      // Record start time (2-day TTL — ephemeral, only needed for anti-cheat timing during the run)
       const startTime = Date.now();
-      await redis.set(`user:${username}:day:${dayId}:run:${input.runIndex}:startTime`, startTime.toString());
+      const startTimeKey = `user:${username}:day:${dayId}:run:${input.runIndex}:startTime`;
+      await redis.set(startTimeKey, startTime.toString());
+      void redis.expire(startTimeKey, 172800);
 
       // Get daily runs and generate the deterministic sequence
       const runs = await getDailyRuns(dayId);
@@ -396,6 +398,32 @@ export const gameRouter = router({
       }
 
       void Promise.allSettled(flagOps);
+
+      // TTLs for user-keyed data — ensures data is auto-purged after inactivity
+      // (onAccountDelete is not yet available on the Devvit Web platform)
+      const TWO_DAYS = 172800;
+      const TWO_WEEKS = 1209600;
+      const THIRTY_DAYS = 2592000;
+      void Promise.allSettled([
+        // Per-day keys (2-day TTL — only relevant today)
+        redis.expire(`user:${username}:day:${dayId}:run:0:score`, TWO_DAYS),
+        redis.expire(`user:${username}:day:${dayId}:run:1:score`, TWO_DAYS),
+        redis.expire(`user:${username}:day:${dayId}:run:2:score`, TWO_DAYS),
+        redis.expire(`user:${username}:day:${dayId}:run:0:startTime`, TWO_DAYS),
+        redis.expire(`user:${username}:day:${dayId}:run:1:startTime`, TWO_DAYS),
+        redis.expire(`user:${username}:day:${dayId}:run:2:startTime`, TWO_DAYS),
+        redis.expire(`user:${username}:day:${dayId}:totals`, TWO_DAYS),
+        // Per-week keys (2-week TTL — relevant until week ends + a few days)
+        redis.expire(`user:${username}:week:${weekId}:perfect_days`, TWO_WEEKS),
+        redis.expire(`user:${username}:week:${weekId}:daily_scores`, TWO_WEEKS),
+        redis.expire(`user:${username}:week:${weekId}:daily_scores_multiplied`, TWO_WEEKS),
+        redis.expire(`user:${username}:week:${weekId}:daily_multipliers`, TWO_WEEKS),
+        // Flag keys (30-day TTL — anti-cheat counters)
+        redis.expire(`flags:${username}:total_runs`, THIRTY_DAYS),
+        redis.expire(`flags:${username}:top_percentile_runs`, THIRTY_DAYS),
+        redis.expire(`flags:${username}:bong_proximity_runs`, THIRTY_DAYS),
+        redis.expire(`flags:${username}:new_account_top_runs`, THIRTY_DAYS),
+      ]);
 
       return { finalScore, bust: finalScore === 0, percentile };
     }),
@@ -634,295 +662,6 @@ export const gameRouter = router({
         const totalMultiplied = days.reduce((sum, d) => sum + d.multipliedScore, 0);
         return { username, mode: 'weekly' as const, days, totalMultiplied, perfectDayCount: perfectDaysArray.length };
       }),
-
-    debugInspect: publicProcedure.query(async () => {
-      const user = await reddit.getCurrentUser();
-      const username = user?.username ?? 'anonymous';
-      const now = new Date();
-      const epochStart = new Date('2024-01-01T00:00:00Z');
-      const dayId = Math.floor((now.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24)).toString();
-      const weekId = getWeekId(now);
-      const dayOfWeek = getDayOfWeek(now);
-      const yesterdayDayId = (parseInt(dayId, 10) - 1).toString();
-
-      const safeGet = async (key: string) => {
-        try { return await redis.get(key); } catch (e) { return `ERROR: ${e}`; }
-      };
-      const safeHGet = async (key: string, field: string) => {
-        try { return await redis.hGet(key, field); } catch (e) { return `ERROR: ${e}`; }
-      };
-      const safeHGetAll = async (key: string) => {
-        try { return await redis.hGetAll(key); } catch (e) { return { error: String(e) }; }
-      };
-      const safeZScore = async (key: string, member: string) => {
-        try { return await redis.zScore(key, member); } catch (e) { return `ERROR: ${e}`; }
-      };
-
-      const [
-        run0Score, run1Score, run2Score,
-        run0Start, run1Start, run2Start,
-        totalsScore, totalsRunOrder,
-        perfectDays, lifetimePerfectDays,
-        yesterdayScore, yesterdayRunOrder,
-        dailyLbScore, weeklyLbScore,
-      ] = await Promise.all([
-        safeGet(`user:${username}:day:${dayId}:run:0:score`),
-        safeGet(`user:${username}:day:${dayId}:run:1:score`),
-        safeGet(`user:${username}:day:${dayId}:run:2:score`),
-        safeGet(`user:${username}:day:${dayId}:run:0:startTime`),
-        safeGet(`user:${username}:day:${dayId}:run:1:startTime`),
-        safeGet(`user:${username}:day:${dayId}:run:2:startTime`),
-        safeHGet(`user:${username}:day:${dayId}:totals`, 'score'),
-        safeHGet(`user:${username}:day:${dayId}:totals`, 'runOrder'),
-        safeGet(`user:${username}:week:${weekId}:perfect_days`),
-        safeGet(`user:${username}:stats:lifetime_perfect_days`),
-        safeHGet(`user:${username}:day:${yesterdayDayId}:totals`, 'score'),
-        safeHGet(`user:${username}:day:${yesterdayDayId}:totals`, 'runOrder'),
-        safeZScore(`leaderboard:daily:day:${dayId}`, username),
-        safeZScore(`leaderboard:weekly:week:${weekId}`, username),
-      ]);
-
-      const dailyScores = await safeHGetAll(`user:${username}:week:${weekId}:daily_scores`);
-      const dailyScoresMultiplied = await safeHGetAll(`user:${username}:week:${weekId}:daily_scores_multiplied`);
-      const dailyMultipliers = await safeHGetAll(`user:${username}:week:${weekId}:daily_multipliers`);
-
-      const perfectDaysArray = perfectDays && typeof perfectDays === 'string' ? JSON.parse(perfectDays) : [];
-
-      // Fetch run configs for debug display
-      const dailyRuns = await getDailyRuns(dayId);
-
-      return {
-        meta: {
-          username,
-          serverTime: now.toISOString(),
-          dayId,
-          yesterdayDayId,
-          weekId,
-          dayOfWeek,
-          dayOfWeekName: getGameDayLabel(dayOfWeek),
-          weekMultiplier: getWeeklyMultiplier(perfectDaysArray.length),
-          perfectDaysThisWeek: perfectDaysArray.length,
-        },
-        today: {
-          runs: {
-            run0: { score: run0Score, startTime: run0Start },
-            run1: { score: run1Score, startTime: run1Start },
-            run2: { score: run2Score, startTime: run2Start },
-          },
-          runConfigs: dailyRuns.map((run, i) => ({
-            runIndex: i,
-            baseIncrementRange: run.personality.baseIncrementRange,
-            jumpChance: run.personality.jumpChance,
-            dipChance: run.personality.dipChance,
-            initialSpikeChance: run.personality.initialSpikeChance,
-            stepRange: run.stepRange,
-          })),
-          totals: { score: totalsScore, runOrder: totalsRunOrder },
-          dailyLeaderboardScore: dailyLbScore,
-        },
-        yesterday: {
-          totalScore: yesterdayScore,
-          runOrder: yesterdayRunOrder,
-        },
-        weekly: {
-          perfectDays,
-          dailyScores,
-          dailyScoresMultiplied,
-          dailyMultipliers,
-          weeklyLeaderboardScore: weeklyLbScore,
-          lifetimePerfectDays,
-        },
-      };
-    }),
-
-    clearDailyStats: publicProcedure.mutation(async () => {
-      const user = await reddit.getCurrentUser();
-      const username = user?.username ?? 'anonymous';
-      const now = new Date();
-      const epochStart = new Date('2024-01-01T00:00:00Z');
-      const dayId = Math.floor((now.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24)).toString();
-      const weekId = getWeekId(now);
-
-      console.log(`[clearDailyStats] Clearing for ${username} on day ${dayId}`);
-      const errors: string[] = [];
-
-      const keysToDelete = [
-        `user:${username}:day:${dayId}:run:0:score`,
-        `user:${username}:day:${dayId}:run:1:score`,
-        `user:${username}:day:${dayId}:run:2:score`,
-        `user:${username}:day:${dayId}:run:0:startTime`,
-        `user:${username}:day:${dayId}:run:1:startTime`,
-        `user:${username}:day:${dayId}:run:2:startTime`,
-        `user:${username}:day:${dayId}:totals`
-      ];
-
-      for (const key of keysToDelete) {
-        try {
-          await redis.del(key);
-        } catch (e) {
-          const msg = `Failed to delete ${key}: ${e}`;
-          console.log(`[clearDailyStats] ${msg}`);
-          errors.push(msg);
-        }
-      }
-
-      try {
-        await redis.zRem(`leaderboard:daily:day:${dayId}`, [username]);
-      } catch (e) {
-        const msg = `Failed to zRem from daily leaderboard: ${e}`;
-        console.log(`[clearDailyStats] ${msg}`);
-        errors.push(msg);
-      }
-
-      // Also remove today's entry from weekly data structures
-      const weeklyHashKeys = [
-        `user:${username}:week:${weekId}:daily_scores`,
-        `user:${username}:week:${weekId}:daily_scores_multiplied`,
-        `user:${username}:week:${weekId}:daily_multipliers`,
-      ];
-      for (const hashKey of weeklyHashKeys) {
-        try {
-          await redis.hDel(hashKey, [dayId]);
-        } catch (e) {
-          const msg = `Failed to hDel ${dayId} from ${hashKey}: ${e}`;
-          console.log(`[clearDailyStats] ${msg}`);
-          errors.push(msg);
-        }
-      }
-
-      // Remove today from perfect days list if present
-      try {
-        const perfectDaysStr = await redis.get(`user:${username}:week:${weekId}:perfect_days`);
-        if (perfectDaysStr) {
-          const perfectDaysArray: string[] = JSON.parse(perfectDaysStr);
-          const filtered = perfectDaysArray.filter(d => d !== dayId);
-          if (filtered.length !== perfectDaysArray.length) {
-            await redis.set(`user:${username}:week:${weekId}:perfect_days`, JSON.stringify(filtered));
-            // Decrement lifetime perfect days counter
-            const lifetimeStr = await redis.get(`user:${username}:stats:lifetime_perfect_days`);
-            const lifetime = lifetimeStr ? parseInt(lifetimeStr, 10) : 0;
-            if (lifetime > 0) {
-              await redis.set(`user:${username}:stats:lifetime_perfect_days`, (lifetime - 1).toString());
-            }
-          }
-        }
-      } catch (e) {
-        const msg = `Failed to update perfect days: ${e}`;
-        console.log(`[clearDailyStats] ${msg}`);
-        errors.push(msg);
-      }
-
-      // Recalculate and update weekly leaderboard
-      try {
-        const weeklyTotal = await calculateWeeklyTotal(username, weekId);
-        if (weeklyTotal > 0) {
-          await redis.zAdd(`leaderboard:weekly:week:${weekId}`, { member: username, score: weeklyTotal });
-        } else {
-          await redis.zRem(`leaderboard:weekly:week:${weekId}`, [username]);
-        }
-      } catch (e) {
-        const msg = `Failed to update weekly leaderboard: ${e}`;
-        console.log(`[clearDailyStats] ${msg}`);
-        errors.push(msg);
-      }
-
-      console.log(`[clearDailyStats] Done. Errors: ${errors.length}`);
-      return { success: errors.length === 0, message: `Cleared daily stats for ${username} on day ${dayId}`, dayId, errors };
-    }),
-
-    clearWeeklyStats: publicProcedure.mutation(async () => {
-      const user = await reddit.getCurrentUser();
-      const username = user?.username ?? 'anonymous';
-      const now = new Date();
-      const weekId = getWeekId(now);
-
-      console.log(`[clearWeeklyStats] Clearing for ${username} in week ${weekId}`);
-      const errors: string[] = [];
-
-      const keysToDelete = [
-        `user:${username}:week:${weekId}:perfect_days`,
-        `user:${username}:week:${weekId}:daily_scores`,
-        `user:${username}:week:${weekId}:daily_scores_multiplied`,
-        `user:${username}:week:${weekId}:daily_multipliers`,
-        `user:${username}:stats:lifetime_perfect_days`
-      ];
-
-      for (const key of keysToDelete) {
-        try {
-          await redis.del(key);
-        } catch (e) {
-          const msg = `Failed to delete ${key}: ${e}`;
-          console.log(`[clearWeeklyStats] ${msg}`);
-          errors.push(msg);
-        }
-      }
-
-      try {
-        await redis.zRem(`leaderboard:weekly:week:${weekId}`, [username]);
-      } catch (e) {
-        const msg = `Failed to zRem from weekly leaderboard: ${e}`;
-        console.log(`[clearWeeklyStats] ${msg}`);
-        errors.push(msg);
-      }
-
-      console.log(`[clearWeeklyStats] Done. Errors: ${errors.length}`);
-      return { success: errors.length === 0, message: `Cleared weekly stats for ${username} in week ${weekId}`, weekId, errors };
-    }),
-
-    clearAllStats: publicProcedure.mutation(async () => {
-      const user = await reddit.getCurrentUser();
-      const username = user?.username ?? 'anonymous';
-      const now = new Date();
-      const epochStart = new Date('2024-01-01T00:00:00Z');
-      const dayId = Math.floor((now.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24)).toString();
-      const weekId = getWeekId(now);
-
-      console.log(`[clearAllStats] Clearing for ${username} on day ${dayId}, week ${weekId}`);
-      const errors: string[] = [];
-
-      const keysToDelete = [
-        `user:${username}:day:${dayId}:run:0:score`,
-        `user:${username}:day:${dayId}:run:1:score`,
-        `user:${username}:day:${dayId}:run:2:score`,
-        `user:${username}:day:${dayId}:run:0:startTime`,
-        `user:${username}:day:${dayId}:run:1:startTime`,
-        `user:${username}:day:${dayId}:run:2:startTime`,
-        `user:${username}:day:${dayId}:totals`,
-        `user:${username}:week:${weekId}:perfect_days`,
-        `user:${username}:week:${weekId}:daily_scores`,
-        `user:${username}:week:${weekId}:daily_scores_multiplied`,
-        `user:${username}:week:${weekId}:daily_multipliers`,
-        `user:${username}:stats:lifetime_perfect_days`
-      ];
-
-      for (const key of keysToDelete) {
-        try {
-          await redis.del(key);
-        } catch (e) {
-          const msg = `Failed to delete ${key}: ${e}`;
-          console.log(`[clearAllStats] ${msg}`);
-          errors.push(msg);
-        }
-      }
-
-      const leaderboards = [
-        { key: `leaderboard:daily:day:${dayId}`, name: 'daily' },
-        { key: `leaderboard:weekly:week:${weekId}`, name: 'weekly' }
-      ];
-
-      for (const lb of leaderboards) {
-        try {
-          await redis.zRem(lb.key, [username]);
-        } catch (e) {
-          const msg = `Failed to zRem from ${lb.name} leaderboard: ${e}`;
-          console.log(`[clearAllStats] ${msg}`);
-          errors.push(msg);
-        }
-      }
-
-      console.log(`[clearAllStats] Done. Errors: ${errors.length}`);
-      return { success: errors.length === 0, message: `Cleared all stats for ${username}`, dayId, weekId, errors };
-    }),
 
     getSuspiciousPlayers: publicProcedure.query(async () => {
       const now = new Date();
