@@ -36,24 +36,27 @@ export const WeeklyBreakdown = ({ isOpen, onClose }: WeeklyBreakdownProps) => {
                 {data.days.map((day) => (
                   <div
                     key={day.dayId}
-                    className={`flex items-center justify-between p-3 rounded-md ${
+                    className={`flex items-center justify-between p-2.5 sm:p-3 rounded-md ${
                       day.isPerfectDay
                         ? 'bg-emerald-950/30 border border-emerald-700/50'
                         : 'bg-neutral-800/50 border border-neutral-700/50'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="text-sm font-bold text-neutral-400 w-20">{day.dayOfWeekName}</div>
-                      {day.isPerfectDay && <span className="text-xs">&#x2B50;</span>}
+                    <div className="flex items-center shrink-0 mr-2">
+                      <div className={`text-sm font-bold ${day.isPerfectDay ? 'text-emerald-400' : 'text-neutral-400'}`}>
+                        {day.dayOfWeekName}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-neutral-500 font-mono">£{day.rawScore}</span>
-                      {day.multiplier > 1.0 && (
-                        <span className="text-xs text-orange-400 font-bold bg-orange-500/20 px-1.5 py-0.5 rounded">
-                          {day.multiplier.toFixed(1)}x
-                        </span>
-                      )}
-                      <span className="text-sm font-mono font-black italic tracking-tighter text-orange-400 w-16 text-right">
+                    <div className="flex items-center gap-1.5 sm:gap-3">
+                      <span className="text-xs text-neutral-500 font-mono w-10 sm:w-12 text-right shrink-0">£{day.rawScore}</span>
+                      <div className="w-9 sm:w-12 flex justify-center shrink-0">
+                        {day.multiplier > 1.0 && (
+                          <span className="text-[10px] sm:text-xs text-orange-400 font-bold bg-orange-500/20 px-1 sm:px-1.5 py-0.5 rounded">
+                            {day.multiplier.toFixed(1)}x
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm font-mono font-black italic tracking-tighter text-orange-400 w-12 sm:w-16 text-right shrink-0">
                         £{day.multipliedScore}
                       </span>
                     </div>
