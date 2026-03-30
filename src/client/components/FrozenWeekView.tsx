@@ -14,9 +14,11 @@ export const FrozenWeekView = ({ weekLabel, activePostUrl, leaderboard }: Frozen
       <div className="crt-vignette" />
       <div className="fixed top-[-20%] left-[-10%] w-[60%] h-[60%] bg-red-600/10 rounded-full blur-[150px] pointer-events-none" />
 
-      <h1 className="text-5xl font-black italic tracking-tighter bg-gradient-to-br from-red-500 to-orange-400 bg-clip-text text-transparent mb-2">
-        NERVE
-      </h1>
+      <img
+        src="/Nerve Shredder 500x500.jpeg"
+        alt="Nerve Shredder"
+        className="w-20 h-20 mb-2 rounded-lg"
+      />
       <div className="text-amber-400 font-bold text-lg mb-1 text-glow-amber">
         {weekLabel}
       </div>

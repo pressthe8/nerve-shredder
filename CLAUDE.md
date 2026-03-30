@@ -65,13 +65,6 @@ There are exactly **3 fixed personalities** — one of each is used every day:
 ### CRITICAL: No .js files in src/
 **Never create `.js` files in `src/`.** This project uses TypeScript with `.js` import extensions (e.g. `from './routers/index.js'`). If a real `.js` file exists next to its `.ts` counterpart, Vite resolves to the `.js` file and silently bundles stale code — the `.ts` file is completely ignored. This previously caused all features added after the initial commit to never be deployed. The `.gitignore` now blocks `src/**/*.js` as a safeguard.
 
-### Testing Controls
-**Temporary buttons added to splash screen for development:**
-- "Clear Daily" - Removes all daily stats and scores for current user
-- "Clear Weekly" - Removes all weekly stats, Perfect Days, and weekly leaderboard entry for current user
-- "Clear All" - Removes both daily and weekly stats for current user
-- **IMPORTANT**: Remove these buttons before production deployment (marked with comment in code)
-
 ### Important: Redis Data Partitioning
 **Redis data is partitioned per subreddit installation** ([docs](https://developers.reddit.com/docs/capabilities/server/redis)):
 - Each subreddit that installs the app gets its own isolated Redis instance
@@ -89,41 +82,58 @@ The AGENTS.md file contains:
 
 ## Development Workflow
 
-### Complete Build & Deploy Workflow
+### How Versioning Works
 
-**Every time you make backend changes (tRPC procedures, server logic), follow this workflow:**
+Understanding the pipeline:
 
-1. **Make changes** to server code (`src/server/routers/`)
-2. **Build**: Run `npm run build` (generates tRPC types)
-3. **Deploy**: Run `npm run deploy` (uploads to Reddit)
-4. **Test**: Open the app on Reddit to verify changes
+```
+npm run build  →  npm run deploy  →  npx devvit install <subreddit>
+```
 
-**Why this is required:**
-- tRPC generates types at build time - frontend won't know about new backend procedures without rebuilding
-- Local builds are NOT automatically deployed - you must upload to Devvit explicitly
-- Without deploying, your changes won't appear on Reddit (you'll see tRPC procedure not found errors)
+- **`npm run build`** — compiles TypeScript to JavaScript in `dist/`. Nothing goes to Reddit yet.
+- **`npm run deploy`** — runs type-check + lint, then uploads `dist/` to Reddit's servers. Bumps the version number (e.g. 0.0.6 → 0.0.7). Uploaded versions are only visible to you and can only be installed on subreddits with **under 200 subscribers**. Use this instead of `npx devvit upload` directly.
+- **`npx devvit install <subreddit>`** — installs the latest uploaded version onto a specific subreddit you moderate. Each subreddit independently tracks which version it's running. **Uploading does NOT auto-update installed subreddits.**
+- **`devvit publish`** — submits the app for Reddit's review. After approval, the app can be installed on any subreddit of any size and appears in the public app directory. Required once r/NerveShredder grows past 200 subscribers.
 
-### When Deployment is Required
+This means you can do staged rollouts: upload once, then install to dev sub first, confirm it works, then install to main sub.
 
-**ALWAYS deploy after:**
+**Subreddits:**
+- Dev: `nerve_shredder_dev`
+- Main: `NerveShredder`
+
+### Standard Development Process
+
+**ALWAYS follow this two-stage rollout for any change:**
+
+1. **Make changes** to the code
+2. **Build & deploy**: `npm run build && npm run deploy`
+4. **Test on dev sub first**: `npx devvit install nerve_shredder_dev`
+5. ⚠️ **PROMPT THE USER**: "Ready to test on r/nerve_shredder_dev — please verify the changes work before I install to the main sub."
+6. Once confirmed working — **install to main**: `npx devvit install NerveShredder`
+7. ⚠️ **PROMPT THE USER**: "Installed on r/NerveShredder. Please verify on the main sub."
+
+**Never install directly to the main sub without testing on dev first**, unless the user explicitly asks to skip.
+
+### When Upload + Install is Required
+
+**ALWAYS upload + install after:**
 - Adding/modifying tRPC queries or mutations
 - Changing backend game logic
 - Adding new Redis keys or data structures
 - Updating return types from server procedures
-
-**NOT required for:**
-- Frontend-only changes (React components, CSS)
-- Documentation updates
-- Comment changes
+- Any frontend changes (React components, CSS, assets)
 
 **Red flags you forgot to deploy:**
 - Console errors: "No procedure found on path 'game.xyz'"
 - 404 errors on tRPC endpoints
 - Features working locally but not on Reddit
+- No `console.log` output that should be there (means old code is still running)
 
 ### Quick Reference
-- `npm run build` - Build the project (required after backend changes)
-- `npm run deploy` - Deploy to Reddit Devvit (required after building)
+- `npm run build` - Build only (no upload)
+- `npm run deploy` - Type-check + lint + upload to Reddit (bumps version)
+- `npx devvit install nerve_shredder_dev` - Install on dev sub
+- `npx devvit install NerveShredder` - Install on main sub
 - `npm run dev` - Development server with hot reload (live development on Reddit)
 - `npm run type-check` - Type checks, lints, and prettifies your app
 - `npm run login` - Logs your CLI into Reddit

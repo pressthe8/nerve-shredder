@@ -4,6 +4,7 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TRPCProvider } from './lib/TRPCProvider.js';
 import { trpc } from './lib/trpc.js';
+import { useSound } from './lib/useSound.js';
 import { HowToPlay } from './components/HowToPlay.js';
 import { WeeklyBreakdown } from './components/WeeklyBreakdown.js';
 import { PlayerBreakdown } from './components/PlayerBreakdown.js';
@@ -32,6 +33,7 @@ const SplashContent = () => {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [utils]);
+  const { playSound, muted, toggleMute } = useSound();
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboardMode, setLeaderboardMode] = useState<'daily' | 'weekly'>('daily');
   const [showHowToPlay, setShowHowToPlay] = useState(false);
@@ -86,11 +88,29 @@ const SplashContent = () => {
       <div className="fixed top-[-20%] left-[-10%] w-[60%] h-[60%] bg-red-600/10 rounded-full blur-[150px] pointer-events-none" />
       <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-cyan-600/5 rounded-full blur-[150px] pointer-events-none" />
 
+      {/* Mute Toggle */}
+      <button
+        onClick={toggleMute}
+        className="absolute top-4 right-4 w-12 h-12 rounded-full bg-neutral-900/60 backdrop-blur-md border border-neutral-700/50 hover:bg-neutral-800/80 hover:border-neutral-600 transition-colors flex items-center justify-center z-40"
+      >
+        {muted ? (
+          <svg className="w-6 h-6 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+          </svg>
+        ) : (
+          <svg className="w-6 h-6 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9" />
+          </svg>
+        )}
+      </button>
+
       {!showLeaderboard ? (
         <>
           {/* Hamburger Menu Button */}
           <button
-            onClick={() => setShowHowToPlay(true)}
+            onClick={() => { playSound('click', 0.35); setShowHowToPlay(true); }}
             className="absolute top-4 left-4 w-12 h-12 rounded-full bg-neutral-900/60 backdrop-blur-md border border-neutral-700/50 hover:bg-neutral-800/80 hover:border-neutral-600 transition-colors flex items-center justify-center z-40"
           >
             <svg className="w-6 h-6 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -99,8 +119,8 @@ const SplashContent = () => {
           </button>
 
           {/* How to Play Modal */}
-          <HowToPlay isOpen={showHowToPlay} onClose={() => setShowHowToPlay(false)} />
-          <WeeklyBreakdown isOpen={showWeeklyBreakdown} onClose={() => setShowWeeklyBreakdown(false)} />
+          <HowToPlay isOpen={showHowToPlay} onClose={() => { playSound('click', 0.35); setShowHowToPlay(false); }} />
+          <WeeklyBreakdown isOpen={showWeeklyBreakdown} onClose={() => { playSound('click', 0.35); setShowWeeklyBreakdown(false); }} />
 
           <img
             src="/Nerve Shredder 500x500.jpeg"
@@ -159,7 +179,7 @@ const SplashContent = () => {
                 </div>
                 {data && data.weeklyScore > 0 && (
                   <button
-                    onClick={() => setShowWeeklyBreakdown(true)}
+                    onClick={() => { playSound('click', 0.35); setShowWeeklyBreakdown(true); }}
                     className="flex-1 bg-gradient-to-br from-amber-950/40 to-amber-900/20 border border-amber-600/30 rounded-md p-4 text-center hover:from-amber-950/50 hover:to-amber-900/30 transition-colors shadow-[0_0_12px_rgba(251,191,36,0.1)]"
                   >
                     <h3 className="text-neutral-400 text-xs font-bold uppercase tracking-[.3em] mb-1">This Week</h3>
@@ -176,7 +196,7 @@ const SplashContent = () => {
               {data?.runsCompleted.includes(false) ? (
                 <button
                   className="bg-red-600 hover:bg-red-500 transition-all duration-200 text-white font-black text-lg py-4 px-12 skew-x-[-12deg] shadow-[0_0_30px_rgba(220,38,38,0.5)] hover:shadow-[0_0_40px_rgba(220,38,38,0.7)] active:scale-95"
-                  onClick={(e) => requestExpandedMode(e.nativeEvent, 'game')}
+                  onClick={(e) => { playSound('start'); requestExpandedMode(e.nativeEvent, 'game'); }}
                 >
                   <span className="inline-block skew-x-[12deg] tracking-wider">PLAY NEXT RUN</span>
                 </button>
@@ -187,7 +207,7 @@ const SplashContent = () => {
               )}
 
               <button
-                onClick={() => setShowLeaderboard(true)}
+                onClick={() => { playSound('click', 0.35); setShowLeaderboard(true); }}
                 className="text-neutral-400 hover:text-white transition-colors text-xs font-bold flex items-center gap-2 tracking-[.2em] uppercase"
               >
                 🏆 View Leaderboard
@@ -203,7 +223,7 @@ const SplashContent = () => {
               🏆 LEADERBOARD
             </h2>
             <button
-              onClick={() => setShowLeaderboard(false)}
+              onClick={() => { playSound('click', 0.35); setShowLeaderboard(false); }}
               className="text-neutral-400 hover:text-white text-2xl font-bold"
             >
               ×
@@ -213,7 +233,7 @@ const SplashContent = () => {
           {/* Tab Toggle */}
           <div className="flex gap-2 mb-6">
             <button
-              onClick={() => setLeaderboardMode('daily')}
+              onClick={() => { playSound('click', 0.35); setLeaderboardMode('daily'); }}
               className={`flex-1 py-3 font-bold transition-all tracking-wider text-sm skew-x-[-8deg] ${
                 leaderboardMode === 'daily'
                   ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(34,211,238,0.3)]'
@@ -223,7 +243,7 @@ const SplashContent = () => {
               <span className="inline-block skew-x-[8deg]">DAILY</span>
             </button>
             <button
-              onClick={() => setLeaderboardMode('weekly')}
+              onClick={() => { playSound('click', 0.35); setLeaderboardMode('weekly'); }}
               className={`flex-1 py-3 font-bold transition-all tracking-wider text-sm skew-x-[-8deg] ${
                 leaderboardMode === 'weekly'
                   ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(251,191,36,0.3)]'
@@ -262,7 +282,7 @@ const SplashContent = () => {
                   currentLeaderboard.map((entry: { username: string; score: number }, index: number) => (
                     <button
                       key={entry.username}
-                      onClick={() => setSelectedPlayer(entry.username)}
+                      onClick={() => { playSound('click', 0.35); setSelectedPlayer(entry.username); }}
                       className={`flex items-center justify-between p-4 rounded-md w-full text-left hover:brightness-110 transition-all ${
                         index === 0
                           ? 'bg-yellow-950/30 border border-yellow-700/50'
@@ -301,7 +321,7 @@ const SplashContent = () => {
               currentLeaderboard.map((entry: { username: string; score: number }, index: number) => (
                 <button
                   key={entry.username}
-                  onClick={() => setSelectedPlayer(entry.username)}
+                  onClick={() => { playSound('click', 0.35); setSelectedPlayer(entry.username); }}
                   className={`flex items-center justify-between p-4 rounded-md w-full text-left hover:brightness-110 transition-all ${
                     index === 0
                       ? 'bg-yellow-950/30 border border-yellow-700/50'
@@ -343,7 +363,7 @@ const SplashContent = () => {
           {selectedPlayer && !isLeaderboardLocked && (
             <PlayerBreakdown
               isOpen={true}
-              onClose={() => setSelectedPlayer(null)}
+              onClose={() => { playSound('click', 0.35); setSelectedPlayer(null); }}
               username={selectedPlayer}
               mode={leaderboardMode}
             />

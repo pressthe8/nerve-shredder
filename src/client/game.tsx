@@ -1,6 +1,7 @@
 import './index.css';
 import { exitExpandedMode } from '@devvit/web/client';
 import { StrictMode, useEffect, useState, useRef, useCallback } from 'react';
+import { useSound } from './lib/useSound.js';
 import { createRoot } from 'react-dom/client';
 import { TRPCProvider } from './lib/TRPCProvider.js';
 import { trpc } from './lib/trpc.js';
@@ -26,21 +27,7 @@ const GameContent = () => {
   const stepIndexRef = useRef<number>(0);
   const sequenceRef = useRef<number[]>([]);
   const bankingRef = useRef(false);
-  const soundsRef = useRef<Record<string, HTMLAudioElement>>({});
-
-  const getSound = useCallback((name: 'tick' | 'bank' | 'bust') => {
-    if (!soundsRef.current[name]) {
-      soundsRef.current[name] = new Audio(`/${name}.mp3`);
-    }
-    return soundsRef.current[name];
-  }, []);
-
-  const playSound = useCallback((name: 'tick' | 'bank' | 'bust') => {
-    const audio = getSound(name);
-    console.log('playSound', name, 'src:', audio.src, 'readyState:', audio.readyState, 'paused:', audio.paused);
-    audio.currentTime = 0;
-    audio.play().then(() => console.log('playing', name)).catch((e) => console.warn('Audio play failed:', name, e));
-  }, [getSound]);
+  const { playSound, muted, toggleMute } = useSound();
 
   const clearRunInterval = () => {
     if (intervalRef.current !== null) {
@@ -63,7 +50,7 @@ const GameContent = () => {
     setPhase('IDLE');
   }, [gameState]);
 
-  const finishRun = useCallback(async (runIndex: number, stepIndex: number) => {
+  const finishRun = useCallback(async (runIndex: number, stepIndex: number, skipBustSound = false) => {
     if (bankingRef.current) return;
     bankingRef.current = true;
     clearRunInterval();
@@ -72,7 +59,7 @@ const GameContent = () => {
       const res = await bankRun.mutateAsync({ runIndex, stepIndex });
 
       if (res.bust) {
-        playSound('bust');
+        if (!skipBustSound) playSound('bust');
         setPhase('BUSTED');
         setPercentile(null);
       } else {
@@ -93,7 +80,7 @@ const GameContent = () => {
     } finally {
       bankingRef.current = false;
     }
-  }, [bankRun, gameState, refetch]);
+  }, [bankRun, gameState, playSound, refetch]);
 
   const executeRun = async () => {
     if (activeRunIndex === null) return;
@@ -106,6 +93,7 @@ const GameContent = () => {
       bankingRef.current = false;
       setAmount(sequence[0] ?? 0);
       setPhase('RUNNING');
+      playSound('tick');
 
       const runIndex = activeRunIndex;
 
@@ -115,7 +103,8 @@ const GameContent = () => {
           // Auto-bust: sequence exhausted
           clearInterval(interval);
           intervalRef.current = null;
-          void finishRun(runIndex, sequence.length);
+          playSound('bust');
+          void finishRun(runIndex, sequence.length, true);
           return;
         }
         stepIndexRef.current = nextStep;
@@ -177,9 +166,27 @@ const GameContent = () => {
       <div className="crt-vignette" />
       <div className="fixed top-[-20%] left-[-10%] w-[60%] h-[60%] bg-red-600/8 rounded-full blur-[150px] pointer-events-none" />
 
+      {/* Mute Toggle */}
+      <button
+        onClick={toggleMute}
+        className="absolute top-4 right-4 w-12 h-12 rounded-full bg-neutral-900/60 backdrop-blur-md border border-neutral-700/50 hover:bg-neutral-800/80 hover:border-neutral-600 transition-colors flex items-center justify-center z-40"
+      >
+        {muted ? (
+          <svg className="w-6 h-6 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+          </svg>
+        ) : (
+          <svg className="w-6 h-6 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9" />
+          </svg>
+        )}
+      </button>
+
       {/* Hamburger Menu Button */}
       <button
-        onClick={() => setShowHowToPlay(true)}
+        onClick={() => { playSound('click', 0.35); setShowHowToPlay(true); }}
         className="absolute top-4 left-4 w-12 h-12 rounded-full bg-neutral-900/60 backdrop-blur-md border border-neutral-700/50 hover:bg-neutral-800/80 hover:border-neutral-600 transition-colors flex items-center justify-center z-40"
       >
         <svg className="w-6 h-6 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -188,7 +195,7 @@ const GameContent = () => {
       </button>
 
       {/* How to Play Modal */}
-      <HowToPlay isOpen={showHowToPlay} onClose={() => setShowHowToPlay(false)} />
+      <HowToPlay isOpen={showHowToPlay} onClose={() => { playSound('click', 0.35); setShowHowToPlay(false); }} />
 
       {/* Today's Attempts Section */}
       {gameState && (
