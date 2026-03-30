@@ -258,6 +258,17 @@ export const gameRouter = router({
       const epochStart = new Date('2024-01-01T00:00:00Z');
       const dayId = Math.floor((now.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24)).toString();
 
+      // Track first-ever play day for new player counting (permanent, no TTL)
+      void (async () => {
+        try {
+          const firstSeenKey = `user:${username}:first_seen_day`;
+          const alreadySeen = await redis.get(firstSeenKey);
+          if (!alreadySeen) {
+            await redis.set(firstSeenKey, dayId);
+          }
+        } catch { /* never break the bank flow */ }
+      })();
+
       // Check if completed
       const existingScore = await redis.get(`user:${username}:day:${dayId}:run:${input.runIndex}:score`);
       if (existingScore !== undefined && existingScore !== null) {

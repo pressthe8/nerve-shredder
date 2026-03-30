@@ -36,6 +36,9 @@
     "tasks": {
       "weekly-post": {
         "endpoint": "/internal/scheduler/weekly-post"
+      },
+      "slack-daily-summary": {
+        "endpoint": "/internal/scheduler/slack-daily-summary"
       }
     }
   },
