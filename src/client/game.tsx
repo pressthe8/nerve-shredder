@@ -186,7 +186,7 @@ const GameContent = () => {
 
       {/* Hamburger Menu Button */}
       <button
-        onClick={() => { playSound('click', 0.35); setShowHowToPlay(true); }}
+        onClick={() => { setShowHowToPlay(true); }}
         className="absolute top-4 left-4 w-12 h-12 rounded-full bg-neutral-900/60 backdrop-blur-md border border-neutral-700/50 hover:bg-neutral-800/80 hover:border-neutral-600 transition-colors flex items-center justify-center z-40"
       >
         <svg className="w-6 h-6 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -195,7 +195,7 @@ const GameContent = () => {
       </button>
 
       {/* How to Play Modal */}
-      <HowToPlay isOpen={showHowToPlay} onClose={() => { playSound('click', 0.35); setShowHowToPlay(false); }} />
+      <HowToPlay isOpen={showHowToPlay} onClose={() => { setShowHowToPlay(false); }} />
 
       {/* Today's Attempts Section */}
       {gameState && (
