@@ -22,6 +22,22 @@ const GameContent = () => {
   const [percentile, setPercentile] = useState<number | null>(null);
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [isLastRun, setIsLastRun] = useState(false);
+  const [nextResetCountdown, setNextResetCountdown] = useState('');
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+      const diff = midnight.getTime() - now.getTime();
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setNextResetCountdown(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stepIndexRef = useRef<number>(0);
@@ -324,7 +340,10 @@ const GameContent = () => {
                </div>
              )}
 
-             <button onClick={(e) => exitExpandedMode(e.nativeEvent)} className="px-10 py-4 w-full rounded-full bg-neutral-800 text-white font-black hover:bg-neutral-700 active:scale-95 transition-transform">Close Game</button>
+             <div className="text-neutral-500 text-xs font-mono tracking-widest uppercase mb-2">
+               Next attempt: <span className="text-amber-400">{nextResetCountdown}</span>
+             </div>
+             <button onClick={(e) => exitExpandedMode(e.nativeEvent)} className="px-10 py-4 w-full rounded-full bg-neutral-800 text-white font-black hover:bg-neutral-700 active:scale-95 transition-transform">Back to Home</button>
           </div>
         )}
       </div>

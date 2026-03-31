@@ -39,6 +39,9 @@
       },
       "slack-daily-summary": {
         "endpoint": "/internal/scheduler/slack-daily-summary"
+      },
+      "daily-snapshot": {
+        "endpoint": "/internal/scheduler/daily-snapshot"
       }
     }
   },

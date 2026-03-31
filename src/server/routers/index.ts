@@ -491,16 +491,23 @@ export const gameRouter = router({
         return { locked: false as const, snapshot: false as const, snapshotDayLabel: null, entries: [] };
       }
 
-      // Player completed all runs — show live data
+      // Player completed all runs — show live data with played-today indicator
       const topScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 49, { by: 'rank' });
+      const entriesWithStatus = await Promise.all(
+        topScores.reverse().map(async (entry: { member: string; score: number }) => {
+          const dailyScore = await redis.zScore(`leaderboard:daily:day:${dayId}`, entry.member);
+          return {
+            username: entry.member,
+            score: entry.score,
+            playedToday: dailyScore !== null && dailyScore !== undefined,
+          };
+        })
+      );
       return {
         locked: false as const,
         snapshot: false as const,
         snapshotDayLabel: null,
-        entries: topScores.reverse().map((entry: { member: string; score: number }) => ({
-          username: entry.member,
-          score: entry.score,
-        })),
+        entries: entriesWithStatus,
       };
     }),
 

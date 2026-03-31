@@ -39,6 +39,22 @@ const SplashContent = () => {
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [showWeeklyBreakdown, setShowWeeklyBreakdown] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState('');
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+      const diff = midnight.getTime() - now.getTime();
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setCountdown(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Glitch effect on logo
   const [glitching, setGlitching] = useState(false);
@@ -201,8 +217,13 @@ const SplashContent = () => {
                   <span className="inline-block skew-x-[12deg] tracking-wider">PLAY NEXT RUN</span>
                 </button>
               ) : (
-                <div className="text-cyan-400 font-bold bg-cyan-500/10 px-8 py-3 skew-x-[-12deg] border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.15)]">
-                  <span className="inline-block skew-x-[12deg] tracking-wider text-sm">ALL RUNS COMPLETED</span>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="text-cyan-400 font-bold bg-cyan-500/10 px-8 py-3 skew-x-[-12deg] border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.15)]">
+                    <span className="inline-block skew-x-[12deg] tracking-wider text-sm">ALL RUNS COMPLETED</span>
+                  </div>
+                  <div className="text-neutral-500 text-xs font-mono tracking-widest uppercase">
+                    Next attempt: <span className="text-amber-400">{countdown}</span>
+                  </div>
                 </div>
               )}
 
@@ -256,13 +277,18 @@ const SplashContent = () => {
 
           {/* Leaderboard List */}
           <div className="space-y-2">
-            <h3 className="text-neutral-400 text-xs font-bold text-center mb-4 tracking-[.3em] uppercase">
+            <h3 className="text-neutral-400 text-xs font-bold text-center mb-2 tracking-[.3em] uppercase">
               {leaderboardMode === 'daily'
                 ? "Today's Top Players"
                 : isWeeklySnapshot && snapshotDayLabel
                   ? `Top Players after ${snapshotDayLabel}`
                   : "This Week's Top Players"}
             </h3>
+            {leaderboardMode === 'weekly' && !isWeeklySnapshot && (
+              <div className="text-xs text-neutral-500 text-center mb-3">
+                <span className="text-amber-400">gold</span> = played today
+              </div>
+            )}
             {isLeaderboardLocked ? (
               <div className="text-center py-12 px-4">
                 <div className="text-4xl mb-4">🔒</div>
@@ -318,7 +344,7 @@ const SplashContent = () => {
                 )}
               </>
             ) : currentLeaderboard && currentLeaderboard.length > 0 ? (
-              currentLeaderboard.map((entry: { username: string; score: number }, index: number) => (
+              currentLeaderboard.map((entry: { username: string; score: number; playedToday?: boolean }, index: number) => (
                 <button
                   key={entry.username}
                   onClick={() => { setSelectedPlayer(entry.username); }}
@@ -346,9 +372,13 @@ const SplashContent = () => {
                     </div>
                   </div>
                   <div className={`text-xl font-mono font-black italic tracking-tighter ${
-                    leaderboardMode === 'daily' ? 'text-cyan-400 text-glow-cyan' : 'text-amber-400 text-glow-amber'
+                    leaderboardMode === 'daily'
+                      ? 'text-cyan-400 text-glow-cyan'
+                      : entry.playedToday
+                        ? 'text-amber-400 text-glow-amber'
+                        : 'text-neutral-500'
                   }`}>
-                    ${entry.score.toLocaleString()}
+                    £{entry.score.toLocaleString()}
                   </div>
                 </button>
               ))

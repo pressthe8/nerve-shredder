@@ -47,11 +47,29 @@ const ensureDailySummaryCronScheduled = async (): Promise<void> => {
   console.log(`[triggers] Scheduled slack-daily-summary cron job: ${jobId}`);
 };
 
+/**
+ * Schedule the daily snapshot cron job if it doesn't already exist.
+ * Fires every day at 00:00 UTC to write the weekly leaderboard snapshot for the new day.
+ */
+const ensureDailySnapshotCronScheduled = async (): Promise<void> => {
+  const existingJobId = await redis.get('scheduler:daily_snapshot_job_id');
+  if (existingJobId) return;
+
+  const sched = await getScheduler();
+  const jobId = await sched.runJob({
+    name: 'daily-snapshot',
+    cron: '0 0 * * *',
+  });
+  await redis.set('scheduler:daily_snapshot_job_id', jobId);
+  console.log(`[triggers] Scheduled daily-snapshot cron job: ${jobId}`);
+};
+
 triggers.post('/on-app-install', async (c) => {
   try {
     const result = await createWeeklyPost();
     await ensureWeeklyCronScheduled();
     await ensureDailySummaryCronScheduled();
+    await ensureDailySnapshotCronScheduled();
     const input = await c.req.json<OnAppInstallRequest>();
 
     return c.json<TriggerResponse>(
@@ -78,6 +96,7 @@ triggers.post('/on-app-upgrade', async (c) => {
     // Ensure the cron jobs exist for pre-existing installations
     await ensureWeeklyCronScheduled();
     await ensureDailySummaryCronScheduled();
+    await ensureDailySnapshotCronScheduled();
 
     // If no post exists for the current week, create one
     const weekId = getWeekId(new Date());
