@@ -72,6 +72,9 @@ const SplashContent = () => {
   const isWeeklySnapshot = leaderboardMode === 'weekly' && (weeklyLeaderboard?.snapshot ?? false);
   const snapshotDayLabel = weeklyLeaderboard?.snapshotDayLabel;
   const currentLeaderboard = currentLeaderboardData?.entries;
+  const currentUserOutsideTop50 = isWeeklySnapshot ? null : ((currentLeaderboardData as { currentUser?: string | null } | undefined)?.currentUser ?? null);
+  const currentUserRank = isWeeklySnapshot ? null : ((currentLeaderboardData as { currentUserRank?: number | null } | undefined)?.currentUserRank ?? null);
+  const currentUserScore = isWeeklySnapshot ? null : ((currentLeaderboardData as { currentUserScore?: number | null } | undefined)?.currentUserScore ?? null);
 
   // Show loading while checking week info
   if (weekInfoLoading) {
@@ -376,6 +379,22 @@ const SplashContent = () => {
               <div className="text-center text-neutral-500 py-8">
                 No scores yet. Be the first!
               </div>
+            )}
+            {currentUserOutsideTop50 && currentUserRank !== null && currentUserScore !== null && (
+              <>
+                <div className="text-center text-neutral-600 text-xs my-2 tracking-widest">· · ·</div>
+                <div className={`flex items-center justify-between gap-3 p-4 rounded-md w-full border border-dashed border-neutral-600 bg-neutral-900/50`}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="text-base font-black italic tracking-tighter shrink-0 w-8 text-right text-neutral-500">
+                      #{currentUserRank}
+                    </div>
+                    <span className="font-bold text-neutral-400 tracking-wide truncate">{currentUserOutsideTop50} <span className="text-neutral-600 text-xs font-normal">(you)</span></span>
+                  </div>
+                  <div className={`text-xl font-mono font-black italic tracking-tighter shrink-0 ${leaderboardMode === 'daily' ? 'text-cyan-700' : 'text-amber-700'}`}>
+                    £{currentUserScore.toLocaleString()}
+                  </div>
+                </div>
+              </>
             )}
           </div>
 

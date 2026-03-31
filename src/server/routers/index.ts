@@ -349,8 +349,8 @@ export const gameRouter = router({
       const snapshotKey = `leaderboard:weekly:week:${weekId}:snapshot_day:${dayId}`;
       const snapshotExists = await redis.get(snapshotKey);
       if (!snapshotExists) {
-        const currentTopScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 49, { by: 'rank' });
-        const snapshotEntries = currentTopScores.reverse().map((e: { member: string; score: number }) => ({
+        const currentTopScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 49, { by: 'rank', reverse: true });
+        const snapshotEntries = currentTopScores.map((e: { member: string; score: number }) => ({
           username: e.member,
           score: e.score,
         }));
@@ -453,13 +453,29 @@ export const gameRouter = router({
         return { locked: true as const, entries: [] };
       }
 
-      const topScores = await redis.zRange(`leaderboard:daily:day:${dayId}`, 0, 49, { by: 'rank' });
+      const topScores = await redis.zRange(`leaderboard:daily:day:${dayId}`, 0, 49, { by: 'rank', reverse: true });
+      const entries = topScores.map((entry: { member: string; score: number }) => ({
+        username: entry.member,
+        score: entry.score,
+      }));
+      const inTop50 = entries.some((e: { username: string; score: number }) => e.username === username);
+      let currentUserRank: number | null = null;
+      let currentUserScore: number | null = null;
+      if (!inTop50) {
+        const rankAsc = await redis.zRank(`leaderboard:daily:day:${dayId}`, username);
+        const score = await redis.zScore(`leaderboard:daily:day:${dayId}`, username);
+        const total = await redis.zCard(`leaderboard:daily:day:${dayId}`);
+        if (rankAsc !== null && rankAsc !== undefined && score !== null && score !== undefined) {
+          currentUserRank = total - rankAsc;
+          currentUserScore = score;
+        }
+      }
       return {
         locked: false as const,
-        entries: topScores.reverse().map((entry: { member: string; score: number }) => ({
-          username: entry.member,
-          score: entry.score,
-        })),
+        entries,
+        currentUser: inTop50 ? null : username,
+        currentUserRank,
+        currentUserScore,
       };
     }),
 
@@ -492,9 +508,9 @@ export const gameRouter = router({
       }
 
       // Player completed all runs — show live data with played-today indicator
-      const topScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 49, { by: 'rank' });
+      const topScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 49, { by: 'rank', reverse: true });
       const entriesWithStatus = await Promise.all(
-        topScores.reverse().map(async (entry: { member: string; score: number }) => {
+        topScores.map(async (entry: { member: string; score: number }) => {
           const dailyScore = await redis.zScore(`leaderboard:daily:day:${dayId}`, entry.member);
           return {
             username: entry.member,
@@ -503,11 +519,26 @@ export const gameRouter = router({
           };
         })
       );
+      const inTop50 = entriesWithStatus.some((e) => e.username === username);
+      let currentUserRank: number | null = null;
+      let currentUserScore: number | null = null;
+      if (!inTop50) {
+        const rankAsc = await redis.zRank(`leaderboard:weekly:week:${weekId}`, username);
+        const score = await redis.zScore(`leaderboard:weekly:week:${weekId}`, username);
+        const total = await redis.zCard(`leaderboard:weekly:week:${weekId}`);
+        if (rankAsc !== null && rankAsc !== undefined && score !== null && score !== undefined) {
+          currentUserRank = total - rankAsc;
+          currentUserScore = score;
+        }
+      }
       return {
         locked: false as const,
         snapshot: false as const,
         snapshotDayLabel: null,
         entries: entriesWithStatus,
+        currentUser: inTop50 ? null : username,
+        currentUserRank,
+        currentUserScore,
       };
     }),
 
@@ -563,9 +594,9 @@ export const gameRouter = router({
       .input(z.object({ weekId: z.string() }))
       .query(async ({ input }) => {
         const topScores = await redis.zRange(
-          `leaderboard:weekly:week:${input.weekId}`, 0, 49, { by: 'rank' }
+          `leaderboard:weekly:week:${input.weekId}`, 0, 49, { by: 'rank', reverse: true }
         );
-        return topScores.reverse().map((entry: { member: string; score: number }) => ({
+        return topScores.map((entry: { member: string; score: number }) => ({
           username: entry.member,
           score: entry.score,
         }));
