@@ -3,6 +3,7 @@ import { router, publicProcedure } from '../trpc.js';
 import { context, redis, reddit } from '@devvit/web/server';
 import { generateSequence, hashSeed, STEP_DISPLAY_MS } from '../../shared/scoreEngine.js';
 import { getWeekId, getDayOfWeek, getGameDayLabel, getWeekLabel } from '../../shared/weekUtils.js';
+import { awardBetaTesterFlairIfEligible } from '../core/flair.js';
 
 // Each run has a specific pre-computed personality
 const RunPersonalitySchema = z.object({
@@ -410,6 +411,9 @@ export const gameRouter = router({
 
       void Promise.allSettled(flagOps);
 
+      // Award beta tester flair (fire-and-forget — silent fail if not a sub member)
+      void awardBetaTesterFlairIfEligible(username).catch(() => {});
+
       // TTLs for user-keyed data — ensures data is auto-purged after inactivity
       // (onAccountDelete is not yet available on the Devvit Web platform)
       const TWO_DAYS = 172800;
@@ -453,15 +457,15 @@ export const gameRouter = router({
         return { locked: true as const, entries: [] };
       }
 
-      const topScores = await redis.zRange(`leaderboard:daily:day:${dayId}`, 0, 49, { by: 'rank', reverse: true });
+      const topScores = await redis.zRange(`leaderboard:daily:day:${dayId}`, 0, 199, { by: 'rank', reverse: true });
       const entries = topScores.map((entry: { member: string; score: number }) => ({
         username: entry.member,
         score: entry.score,
       }));
-      const inTop50 = entries.some((e: { username: string; score: number }) => e.username === username);
+      const inList = entries.some((e: { username: string; score: number }) => e.username === username);
       let currentUserRank: number | null = null;
       let currentUserScore: number | null = null;
-      if (!inTop50) {
+      if (!inList) {
         const rankAsc = await redis.zRank(`leaderboard:daily:day:${dayId}`, username);
         const score = await redis.zScore(`leaderboard:daily:day:${dayId}`, username);
         const total = await redis.zCard(`leaderboard:daily:day:${dayId}`);
@@ -473,7 +477,7 @@ export const gameRouter = router({
       return {
         locked: false as const,
         entries,
-        currentUser: inTop50 ? null : username,
+        currentUser: username,
         currentUserRank,
         currentUserScore,
       };
@@ -508,7 +512,7 @@ export const gameRouter = router({
       }
 
       // Player completed all runs — show live data with played-today indicator
-      const topScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 49, { by: 'rank', reverse: true });
+      const topScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 199, { by: 'rank', reverse: true });
       const entriesWithStatus = await Promise.all(
         topScores.map(async (entry: { member: string; score: number }) => {
           const dailyScore = await redis.zScore(`leaderboard:daily:day:${dayId}`, entry.member);
@@ -519,10 +523,10 @@ export const gameRouter = router({
           };
         })
       );
-      const inTop50 = entriesWithStatus.some((e) => e.username === username);
+      const inList = entriesWithStatus.some((e) => e.username === username);
       let currentUserRank: number | null = null;
       let currentUserScore: number | null = null;
-      if (!inTop50) {
+      if (!inList) {
         const rankAsc = await redis.zRank(`leaderboard:weekly:week:${weekId}`, username);
         const score = await redis.zScore(`leaderboard:weekly:week:${weekId}`, username);
         const total = await redis.zCard(`leaderboard:weekly:week:${weekId}`);
@@ -536,7 +540,7 @@ export const gameRouter = router({
         snapshot: false as const,
         snapshotDayLabel: null,
         entries: entriesWithStatus,
-        currentUser: inTop50 ? null : username,
+        currentUser: username,
         currentUserRank,
         currentUserScore,
       };

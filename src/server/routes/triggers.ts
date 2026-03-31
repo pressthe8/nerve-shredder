@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { OnAppInstallRequest, TriggerResponse } from '@devvit/web/shared';
 import { context, redis } from '@devvit/web/server';
 import { createWeeklyPost } from '../core/post.js';
+import { awardBetaTesterFlairIfEligible } from '../core/flair.js';
 import { getWeekId } from '../../shared/weekUtils.js';
 
 // Lazy import to avoid client tsconfig browser-condition resolution issue
@@ -84,6 +85,17 @@ triggers.post('/on-app-upgrade', async (c) => {
     const existingPostId = await redis.get(`week:${weekId}:post_id`);
     if (!existingPostId) {
       await createWeeklyPost();
+    }
+
+    // Backfill beta tester flair for all players in the current week's leaderboard
+    try {
+      const allPlayers = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, -1, { by: 'rank' });
+      for (const player of allPlayers) {
+        await awardBetaTesterFlairIfEligible(player.member);
+      }
+      console.log(`[triggers] Beta tester flair backfilled for ${allPlayers.length} players`);
+    } catch (err) {
+      console.error(`[triggers] Beta tester backfill error: ${err}`);
     }
 
     return c.json<TriggerResponse>(

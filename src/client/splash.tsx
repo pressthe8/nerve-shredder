@@ -36,6 +36,8 @@ const SplashContent = () => {
   const { playSound, muted, toggleMute } = useSound();
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboardMode, setLeaderboardMode] = useState<'daily' | 'weekly'>('daily');
+  const [leaderboardPage, setLeaderboardPage] = useState(0);
+  const PAGE_SIZE = 7;
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [showWeeklyBreakdown, setShowWeeklyBreakdown] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
@@ -72,7 +74,7 @@ const SplashContent = () => {
   const isWeeklySnapshot = leaderboardMode === 'weekly' && (weeklyLeaderboard?.snapshot ?? false);
   const snapshotDayLabel = weeklyLeaderboard?.snapshotDayLabel;
   const currentLeaderboard = currentLeaderboardData?.entries;
-  const currentUserOutsideTop50 = isWeeklySnapshot ? null : ((currentLeaderboardData as { currentUser?: string | null } | undefined)?.currentUser ?? null);
+  const currentUser = isWeeklySnapshot ? null : ((currentLeaderboardData as { currentUser?: string | null } | undefined)?.currentUser ?? null);
   const currentUserRank = isWeeklySnapshot ? null : ((currentLeaderboardData as { currentUserRank?: number | null } | undefined)?.currentUserRank ?? null);
   const currentUserScore = isWeeklySnapshot ? null : ((currentLeaderboardData as { currentUserScore?: number | null } | undefined)?.currentUserScore ?? null);
 
@@ -99,7 +101,7 @@ const SplashContent = () => {
   }
 
   return (
-    <div className={`flex flex-col items-center min-h-screen bg-neutral-950 text-white p-3 font-mono cursor-crosshair relative ${showLeaderboard ? 'justify-start pt-8' : 'justify-center'}`}>
+    <div className={`flex flex-col items-center min-h-screen bg-neutral-950 text-white p-3 font-mono cursor-crosshair relative ${showLeaderboard ? 'justify-start pt-3' : 'justify-center'}`}>
       {/* CRT Overlays */}
       <div className="scanline-overlay" />
       <div className="crt-vignette" />
@@ -242,129 +244,72 @@ const SplashContent = () => {
         </>
       ) : (
         <div className="w-full max-w-md">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-black italic tracking-tighter flex items-center gap-2">
-              🏆 LEADERBOARD
-            </h2>
+          <div className="relative flex items-center justify-center mb-3">
+            {/* Centred tabs */}
+            <div className="flex gap-1">
+              <button
+                onClick={() => { setLeaderboardMode('daily'); setLeaderboardPage(0); }}
+                className={`px-4 py-1.5 font-bold transition-all tracking-wider text-xs skew-x-[-8deg] ${
+                  leaderboardMode === 'daily'
+                    ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(34,211,238,0.3)]'
+                    : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                }`}
+              >
+                <span className="inline-block skew-x-[8deg]">DAILY</span>
+              </button>
+              <button
+                onClick={() => { setLeaderboardMode('weekly'); setLeaderboardPage(0); }}
+                className={`px-4 py-1.5 font-bold transition-all tracking-wider text-xs skew-x-[-8deg] ${
+                  leaderboardMode === 'weekly'
+                    ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(251,191,36,0.3)]'
+                    : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                }`}
+              >
+                <span className="inline-block skew-x-[8deg]">WEEKLY</span>
+              </button>
+            </div>
+            {/* X close — absolute right */}
             <button
               onClick={() => { setShowLeaderboard(false); }}
-              className="text-neutral-400 hover:text-white text-2xl font-bold"
+              className="absolute right-0 text-neutral-400 hover:text-white text-2xl font-bold leading-none"
             >
               ×
             </button>
           </div>
 
-          {/* Tab Toggle */}
-          <div className="flex gap-2 mb-6">
-            <button
-              onClick={() => { setLeaderboardMode('daily'); }}
-              className={`flex-1 py-3 font-bold transition-all tracking-wider text-sm skew-x-[-8deg] ${
-                leaderboardMode === 'daily'
-                  ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(34,211,238,0.3)]'
-                  : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
-              }`}
-            >
-              <span className="inline-block skew-x-[8deg]">DAILY</span>
-            </button>
-            <button
-              onClick={() => { setLeaderboardMode('weekly'); }}
-              className={`flex-1 py-3 font-bold transition-all tracking-wider text-sm skew-x-[-8deg] ${
-                leaderboardMode === 'weekly'
-                  ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(251,191,36,0.3)]'
-                  : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
-              }`}
-            >
-              <span className="inline-block skew-x-[8deg]">WEEKLY</span>
-            </button>
-          </div>
-
           {/* Leaderboard List */}
-          <div className="space-y-2">
-            <h3 className="text-neutral-400 text-xs font-bold text-center mb-2 tracking-[.3em] uppercase">
-              {leaderboardMode === 'daily'
-                ? "Today's Top Players"
-                : isWeeklySnapshot && snapshotDayLabel
-                  ? `Top Players after ${snapshotDayLabel}`
-                  : "This Week's Top Players"}
-            </h3>
-            {leaderboardMode === 'weekly' && !isWeeklySnapshot && (
-              <div className="text-xs text-neutral-500 text-center mb-3">
-                <span className="text-amber-400">gold</span> = played today
-              </div>
-            )}
-            {isLeaderboardLocked ? (
-              <div className="text-center py-12 px-4">
-                <div className="text-4xl mb-4">🔒</div>
-                <div className="text-neutral-300 font-bold text-sm mb-2 tracking-wider uppercase">
-                  Leaderboard Locked
-                </div>
-                <div className="text-neutral-500 text-sm max-w-xs mx-auto">
-                  Complete your 3 daily runs to reveal today's standings.
-                </div>
-              </div>
-            ) : isWeeklySnapshot && snapshotDayLabel ? (
-              <>
-                <div className="text-center text-neutral-500 text-xs mb-4 italic">
-                  Standings before today's play — complete your runs to see live results.
-                </div>
-                {currentLeaderboard && currentLeaderboard.length > 0 ? (
-                  currentLeaderboard.map((entry: { username: string; score: number }, index: number) => (
-                    <button
-                      key={entry.username}
-                      onClick={() => { setSelectedPlayer(entry.username); }}
-                      className={`flex items-center justify-between gap-3 p-4 rounded-md w-full text-left hover:brightness-110 transition-all ${
-                        index === 0
-                          ? 'bg-yellow-950/30 border border-yellow-700/50'
-                          : index === 1
-                            ? 'bg-neutral-800/50 border border-neutral-700'
-                            : index === 2
-                              ? 'bg-orange-950/30 border border-orange-900/50'
-                              : 'bg-neutral-900/30 border border-neutral-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className={`text-base font-black italic tracking-tighter shrink-0 w-8 text-right ${
-                          index === 0 ? 'text-yellow-400' : index === 1 ? 'text-neutral-300' : index === 2 ? 'text-orange-600' : 'text-neutral-500'
-                        }`}>
-                          #{index + 1}
-                        </div>
-                        <span className="font-bold text-white tracking-wide truncate">{entry.username}</span>
-                      </div>
-                      <div className="text-xl font-mono font-black italic tracking-tighter text-amber-400 text-glow-amber shrink-0">
-                        £{entry.score.toLocaleString()}
-                      </div>
-                    </button>
-                  ))
-                ) : (
-                  <div className="text-center text-neutral-500 py-8">
-                    No scores yet. Be the first!
-                  </div>
-                )}
-              </>
-            ) : currentLeaderboard && currentLeaderboard.length > 0 ? (
-              currentLeaderboard.map((entry: { username: string; score: number; playedToday?: boolean }, index: number) => (
+          {(() => {
+            const totalEntries = currentLeaderboard?.length ?? 0;
+            const totalPages = Math.max(1, Math.ceil(totalEntries / PAGE_SIZE));
+            const safePage = Math.min(leaderboardPage, totalPages - 1);
+            const pageEntries = currentLeaderboard?.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE) ?? [];
+            const pageOffset = safePage * PAGE_SIZE;
+
+            const renderEntry = (entry: { username: string; score: number; playedToday?: boolean }, index: number) => {
+              const globalIndex = pageOffset + index;
+              return (
                 <button
                   key={entry.username}
                   onClick={() => { setSelectedPlayer(entry.username); }}
-                  className={`flex items-center justify-between gap-3 p-4 rounded-md w-full text-left hover:brightness-110 transition-all ${
-                    index === 0
+                  className={`flex items-center justify-between gap-3 p-2 rounded w-full text-left hover:brightness-110 transition-all ${
+                    globalIndex === 0
                       ? 'bg-yellow-950/30 border border-yellow-700/50'
-                      : index === 1
+                      : globalIndex === 1
                         ? 'bg-neutral-800/50 border border-neutral-700'
-                        : index === 2
+                        : globalIndex === 2
                           ? 'bg-orange-950/30 border border-orange-900/50'
                           : 'bg-neutral-900/30 border border-neutral-800'
                   }`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className={`text-base font-black italic tracking-tighter shrink-0 w-8 text-right ${
-                      index === 0 ? 'text-yellow-400' : index === 1 ? 'text-neutral-300' : index === 2 ? 'text-orange-600' : 'text-neutral-500'
+                    <div className={`text-sm font-black italic tracking-tighter shrink-0 w-8 text-right ${
+                      globalIndex === 0 ? 'text-yellow-400' : globalIndex === 1 ? 'text-neutral-300' : globalIndex === 2 ? 'text-orange-600' : 'text-neutral-500'
                     }`}>
-                      #{index + 1}
+                      #{globalIndex + 1}
                     </div>
-                    <span className="font-bold text-white tracking-wide truncate">{entry.username}</span>
+                    <span className="font-bold text-white text-sm tracking-wide truncate">{entry.username}</span>
                   </div>
-                  <div className={`text-xl font-mono font-black italic tracking-tighter shrink-0 ${
+                  <div className={`text-base font-mono font-black italic tracking-tighter shrink-0 ${
                     leaderboardMode === 'daily'
                       ? 'text-cyan-400 text-glow-cyan'
                       : entry.playedToday
@@ -374,29 +319,99 @@ const SplashContent = () => {
                     £{entry.score.toLocaleString()}
                   </div>
                 </button>
-              ))
-            ) : (
-              <div className="text-center text-neutral-500 py-8">
-                No scores yet. Be the first!
-              </div>
-            )}
-            {currentUserOutsideTop50 && currentUserRank !== null && currentUserScore !== null && (
-              <>
-                <div className="text-center text-neutral-600 text-xs my-2 tracking-widest">· · ·</div>
-                <div className={`flex items-center justify-between gap-3 p-4 rounded-md w-full border border-dashed border-neutral-600 bg-neutral-900/50`}>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="text-base font-black italic tracking-tighter shrink-0 w-8 text-right text-neutral-500">
-                      #{currentUserRank}
+              );
+            };
+
+            return (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-neutral-400 text-xs font-bold tracking-[.2em] uppercase">
+                    {leaderboardMode === 'daily'
+                      ? "Today"
+                      : isWeeklySnapshot && snapshotDayLabel
+                        ? `After ${snapshotDayLabel}`
+                        : "This Week"}
+                  </h3>
+                  {leaderboardMode === 'weekly' && !isWeeklySnapshot && (
+                    <div className="text-xs text-neutral-500">
+                      <span className="text-amber-400">gold</span> = played today
                     </div>
-                    <span className="font-bold text-neutral-400 tracking-wide truncate">{currentUserOutsideTop50} <span className="text-neutral-600 text-xs font-normal">(you)</span></span>
-                  </div>
-                  <div className={`text-xl font-mono font-black italic tracking-tighter shrink-0 ${leaderboardMode === 'daily' ? 'text-cyan-700' : 'text-amber-700'}`}>
-                    £{currentUserScore.toLocaleString()}
-                  </div>
+                  )}
                 </div>
-              </>
-            )}
-          </div>
+
+                {/* Current user — always pinned at top when we have their data */}
+                {(() => {
+                  if (isLeaderboardLocked || isWeeklySnapshot || !currentUser) return null;
+                  const inListEntry = currentLeaderboard?.find((e: { username: string; score: number; playedToday?: boolean }) => e.username === currentUser);
+                  const inListIndex = currentLeaderboard?.findIndex((e: { username: string }) => e.username === currentUser) ?? -1;
+                  const rank = inListEntry && inListIndex >= 0 ? inListIndex + 1 : currentUserRank;
+                  const score = inListEntry ? inListEntry.score : currentUserScore;
+                  if (rank === null || score === null) return null;
+                  return (
+                    <div className="flex items-center justify-between gap-3 p-2 rounded w-full border border-dashed border-neutral-600 bg-neutral-900/50">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="text-sm font-black italic tracking-tighter shrink-0 w-8 text-right text-neutral-500">#{rank}</div>
+                        <span className="font-bold text-neutral-400 text-sm tracking-wide truncate">{currentUser} <span className="text-neutral-600 text-xs font-normal">(you)</span></span>
+                      </div>
+                      <div className={`text-base font-mono font-black italic tracking-tighter shrink-0 ${leaderboardMode === 'daily' ? 'text-cyan-700' : 'text-amber-700'}`}>
+                        £{score.toLocaleString()}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {isLeaderboardLocked ? (
+                  <div className="text-center py-8 px-4">
+                    <div className="text-4xl mb-3">🔒</div>
+                    <div className="text-neutral-300 font-bold text-sm mb-2 tracking-wider uppercase">Leaderboard Locked</div>
+                    <div className="text-neutral-500 text-sm max-w-xs mx-auto">Complete your 3 daily runs to reveal today's standings.</div>
+                  </div>
+                ) : isWeeklySnapshot && snapshotDayLabel ? (
+                  <>
+                    <div className="text-center text-neutral-500 text-xs mb-3 italic">
+                      Standings before today's play — complete your runs to see live results.
+                    </div>
+                    {totalEntries > 0 ? pageEntries.map((entry: { username: string; score: number; playedToday?: boolean }, i: number) => renderEntry(entry, i)) : (
+                      <div className="text-center text-neutral-500 py-8">No scores yet. Be the first!</div>
+                    )}
+                  </>
+                ) : totalEntries > 0 ? (
+                  pageEntries.map((entry: { username: string; score: number; playedToday?: boolean }, i: number) => renderEntry(entry, i))
+                ) : (
+                  <div className="text-center text-neutral-500 py-8">No scores yet. Be the first!</div>
+                )}
+
+                {/* Pagination controls */}
+                {!isLeaderboardLocked && totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    <button
+                      onClick={() => setLeaderboardPage(0)}
+                      disabled={safePage === 0}
+                      className="text-neutral-400 hover:text-white disabled:text-neutral-700 font-bold text-lg px-1"
+                    >«</button>
+                    <button
+                      onClick={() => setLeaderboardPage(Math.max(0, safePage - 1))}
+                      disabled={safePage === 0}
+                      className="text-neutral-400 hover:text-white disabled:text-neutral-700 font-bold text-lg px-1"
+                    >‹</button>
+                    <span className="text-xs text-neutral-500 font-mono tracking-wider px-1">
+                      {safePage + 1} / {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setLeaderboardPage(Math.min(totalPages - 1, safePage + 1))}
+                      disabled={safePage === totalPages - 1}
+                      className="text-neutral-400 hover:text-white disabled:text-neutral-700 font-bold text-lg px-1"
+                    >›</button>
+                    <button
+                      onClick={() => setLeaderboardPage(totalPages - 1)}
+                      disabled={safePage === totalPages - 1}
+                      className="text-neutral-400 hover:text-white disabled:text-neutral-700 font-bold text-lg px-1"
+                    >»</button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Player Breakdown Modal */}
           {selectedPlayer && !isLeaderboardLocked && (
