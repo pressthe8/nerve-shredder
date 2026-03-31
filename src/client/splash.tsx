@@ -309,7 +309,7 @@ const SplashContent = () => {
                     <button
                       key={entry.username}
                       onClick={() => { setSelectedPlayer(entry.username); }}
-                      className={`flex items-center justify-between p-4 rounded-md w-full text-left hover:brightness-110 transition-all ${
+                      className={`flex items-center justify-between gap-3 p-4 rounded-md w-full text-left hover:brightness-110 transition-all ${
                         index === 0
                           ? 'bg-yellow-950/30 border border-yellow-700/50'
                           : index === 1
@@ -319,21 +319,16 @@ const SplashContent = () => {
                               : 'bg-neutral-900/30 border border-neutral-800'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className={`text-2xl font-black italic tracking-tighter ${
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`text-base font-black italic tracking-tighter shrink-0 w-8 text-right ${
                           index === 0 ? 'text-yellow-400' : index === 1 ? 'text-neutral-300' : index === 2 ? 'text-orange-600' : 'text-neutral-500'
                         }`}>
                           #{index + 1}
                         </div>
-                        <div className="flex items-center gap-2">
-                          {index === 0 && <span className="text-xl">🏆</span>}
-                          {index === 1 && <span className="text-xl">🥈</span>}
-                          {index === 2 && <span className="text-xl">🥉</span>}
-                          <span className="font-bold text-white tracking-wide">{entry.username}</span>
-                        </div>
+                        <span className="font-bold text-white tracking-wide truncate">{entry.username}</span>
                       </div>
-                      <div className="text-xl font-mono font-black italic tracking-tighter text-amber-400 text-glow-amber">
-                        ${entry.score.toLocaleString()}
+                      <div className="text-xl font-mono font-black italic tracking-tighter text-amber-400 text-glow-amber shrink-0">
+                        £{entry.score.toLocaleString()}
                       </div>
                     </button>
                   ))
@@ -348,7 +343,7 @@ const SplashContent = () => {
                 <button
                   key={entry.username}
                   onClick={() => { setSelectedPlayer(entry.username); }}
-                  className={`flex items-center justify-between p-4 rounded-md w-full text-left hover:brightness-110 transition-all ${
+                  className={`flex items-center justify-between gap-3 p-4 rounded-md w-full text-left hover:brightness-110 transition-all ${
                     index === 0
                       ? 'bg-yellow-950/30 border border-yellow-700/50'
                       : index === 1
@@ -358,20 +353,15 @@ const SplashContent = () => {
                           : 'bg-neutral-900/30 border border-neutral-800'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={`text-2xl font-black italic tracking-tighter ${
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className={`text-base font-black italic tracking-tighter shrink-0 w-8 text-right ${
                       index === 0 ? 'text-yellow-400' : index === 1 ? 'text-neutral-300' : index === 2 ? 'text-orange-600' : 'text-neutral-500'
                     }`}>
                       #{index + 1}
                     </div>
-                    <div className="flex items-center gap-2">
-                      {index === 0 && <span className="text-xl">🏆</span>}
-                      {index === 1 && <span className="text-xl">🥈</span>}
-                      {index === 2 && <span className="text-xl">🥉</span>}
-                      <span className="font-bold text-white tracking-wide">{entry.username}</span>
-                    </div>
+                    <span className="font-bold text-white tracking-wide truncate">{entry.username}</span>
                   </div>
-                  <div className={`text-xl font-mono font-black italic tracking-tighter ${
+                  <div className={`text-xl font-mono font-black italic tracking-tighter shrink-0 ${
                     leaderboardMode === 'daily'
                       ? 'text-cyan-400 text-glow-cyan'
                       : entry.playedToday
