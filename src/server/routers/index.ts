@@ -634,15 +634,23 @@ export const gameRouter = router({
 
         if (mode === 'daily') {
           const dayId = Math.floor((now.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24)).toString();
-          const scores = await Promise.all([
+          const [score0, score1, score2, totals] = await Promise.all([
             redis.get(`user:${username}:day:${dayId}:run:0:score`),
             redis.get(`user:${username}:day:${dayId}:run:1:score`),
             redis.get(`user:${username}:day:${dayId}:run:2:score`),
+            redis.hGetAll(`user:${username}:day:${dayId}:totals`),
           ]);
 
-          const runs = scores.map((s, i) => ({
-            runIndex: i,
-            score: s !== null && s !== undefined ? parseInt(s, 10) : null,
+          const scores = [score0, score1, score2];
+          const runOrderRaw = (totals as Record<string, string>)?.runOrder;
+          const runOrder: number[] = runOrderRaw ? JSON.parse(runOrderRaw) : [0, 1, 2];
+
+          // Sort runs by the order the player actually played them
+          const runs = runOrder.map((runIndex) => ({
+            runIndex,
+            score: scores[runIndex] !== null && scores[runIndex] !== undefined
+              ? parseInt(scores[runIndex] as string, 10)
+              : null,
           }));
 
           const totalScore = runs.reduce((sum, r) => sum + (r.score ?? 0), 0);
