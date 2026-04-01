@@ -7,12 +7,12 @@ export type FlairKey =
   | 'weekly_podium'
   | 'weekly_winner';
 
-const FLAIR_DISPLAY: Record<FlairKey, string> = {
-  beta_tester: '🧪 Beta Tester',
-  daily_podium: '🥉 Daily Podium',
-  daily_winner: '🥇 Daily Winner',
-  weekly_podium: '🏅 Weekly Podium',
-  weekly_winner: '🏆 Weekly Winner',
+const FLAIR_TEMPLATE_IDS: Record<FlairKey, string> = {
+  beta_tester: 'ee8be736-2d60-11f1-ba39-225489d62581',
+  daily_podium: '685a037c-2d61-11f1-8721-bad5627891fe',
+  daily_winner: '8943b9ac-2d61-11f1-b979-b2117c83b329',
+  weekly_podium: 'b3677d4a-2d61-11f1-b485-5a2c1b7caac0',
+  weekly_winner: 'd5d4a0ec-2d61-11f1-aa7d-423977847342',
 };
 
 /** Record a flair as earned in Redis. Returns true if it was newly added. */
@@ -30,8 +30,7 @@ async function trySetFlair(username: string, flair: FlairKey): Promise<void> {
     await reddit.setUserFlair({
       subredditName: context.subredditName!,
       username,
-      text: FLAIR_DISPLAY[flair],
-      cssClass: flair,
+      flairTemplateId: FLAIR_TEMPLATE_IDS[flair],
     });
   } catch {
     // User is not a subreddit member — will retry next time they earn this flair

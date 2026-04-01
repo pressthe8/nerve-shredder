@@ -42,8 +42,10 @@ const SplashContent = () => {
   const [showWeeklyBreakdown, setShowWeeklyBreakdown] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [countdown, setCountdown] = useState('');
+  const [msUntilMidnight, setMsUntilMidnight] = useState(Infinity);
 
   useEffect(() => {
+    let prev = Infinity;
     const tick = () => {
       const now = new Date();
       const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
@@ -52,11 +54,16 @@ const SplashContent = () => {
       const m = Math.floor((diff % 3600000) / 60000);
       const s = Math.floor((diff % 60000) / 1000);
       setCountdown(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
+      setMsUntilMidnight(diff);
+      if (diff <= 0 && prev > 0) {
+        void utils.invalidate();
+      }
+      prev = diff;
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [utils]);
 
   // Glitch effect on logo
   const [glitching, setGlitching] = useState(false);
@@ -215,12 +222,19 @@ const SplashContent = () => {
               </div>
 
               {data?.runsCompleted.includes(false) ? (
-                <button
-                  className="bg-red-600 hover:bg-red-500 transition-all duration-200 text-white font-black text-lg py-4 px-12 skew-x-[-12deg] shadow-[0_0_30px_rgba(220,38,38,0.5)] hover:shadow-[0_0_40px_rgba(220,38,38,0.7)] active:scale-95"
-                  onClick={(e) => { playSound('start'); requestExpandedMode(e.nativeEvent, 'game'); }}
-                >
-                  <span className="inline-block skew-x-[12deg] tracking-wider">PLAY NEXT RUN</span>
-                </button>
+                <div className="flex flex-col items-center gap-2">
+                  {msUntilMidnight < 5 * 60 * 1000 && (
+                    <div className="text-amber-400 text-xs font-bold text-center px-4">
+                      ⚠️ Less than 5 minutes until end of day — incomplete runs will receive a score of £0
+                    </div>
+                  )}
+                  <button
+                    className="bg-red-600 hover:bg-red-500 transition-all duration-200 text-white font-black text-lg py-4 px-12 skew-x-[-12deg] shadow-[0_0_30px_rgba(220,38,38,0.5)] hover:shadow-[0_0_40px_rgba(220,38,38,0.7)] active:scale-95"
+                    onClick={(e) => { playSound('start'); requestExpandedMode(e.nativeEvent, 'game'); }}
+                  >
+                    <span className="inline-block skew-x-[12deg] tracking-wider">PLAY NEXT RUN</span>
+                  </button>
+                </div>
               ) : (
                 <div className="flex flex-col items-center gap-1">
                   <div className="text-cyan-400 font-bold bg-cyan-500/10 px-8 py-3 skew-x-[-12deg] border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.15)]">
