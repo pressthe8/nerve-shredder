@@ -4,6 +4,8 @@ import { context, redis, reddit } from '@devvit/web/server';
 import { generateSequence, hashSeed, STEP_DISPLAY_MS } from '../../shared/scoreEngine.js';
 import { getWeekId, getDayOfWeek, getGameDayLabel, getWeekLabel } from '../../shared/weekUtils.js';
 import { awardBetaTesterFlairIfEligible } from '../core/flair.js';
+import { buildOptimalBankComment } from '../core/commentCopy.js';
+import type { T1, T3 } from '@devvit/shared-types/tid.js';
 
 // Each run has a specific pre-computed personality
 const RunPersonalitySchema = z.object({
@@ -310,8 +312,13 @@ export const gameRouter = router({
         }
       }
 
-      // Record score
+      // Detect optimal bank (banked at exact sequence peak, not a bust)
+      const peakScore = Math.max(...sequence);
+      const bankedAtPeak = finalScore > 0 && sequence[input.stepIndex] === peakScore;
+
+      // Record score and optimal flag
       await redis.set(`user:${username}:day:${dayId}:run:${input.runIndex}:score`, finalScore.toString());
+      await redis.set(`user:${username}:day:${dayId}:run:${input.runIndex}:optimal`, bankedAtPeak ? '1' : '0');
 
       // Update totals
       const currentTotalStr = await redis.hGet(`user:${username}:day:${dayId}:totals`, 'score');
@@ -340,6 +347,30 @@ export const gameRouter = router({
           perfectDaysArray.push(dayId);
           await redis.set(`user:${username}:week:${weekId}:perfect_days`, JSON.stringify(perfectDaysArray));
           await redis.incrBy(`user:${username}:stats:lifetime_perfect_days`, 1);
+        }
+      }
+
+      if (allComplete) {
+        // Check how many runs the player banked at the exact sequence peak
+        const optimalFlags = await Promise.all([
+          redis.get(`user:${username}:day:${dayId}:run:0:optimal`),
+          redis.get(`user:${username}:day:${dayId}:run:1:optimal`),
+          redis.get(`user:${username}:day:${dayId}:run:2:optimal`),
+        ]);
+        const optimalCount = optimalFlags.filter(f => f === '1').length;
+
+        if (optimalCount >= 1 && context.postId) {
+          void (async () => {
+            try {
+              const resultsCommentId = await redis.get(`day:${dayId}:results_comment_id`);
+              const targetId = (resultsCommentId ?? context.postId) as T1 | T3;
+              const text = buildOptimalBankComment(username, optimalCount as 1 | 2 | 3);
+              await reddit.submitComment({ id: targetId, text, runAs: 'APP' });
+              console.log(`[bankRun] Highlight comment posted for ${username} (${optimalCount} optimal banks)`);
+            } catch (err) {
+              console.error(`[bankRun] Failed to post highlight comment: ${err}`);
+            }
+          })();
         }
       }
 
@@ -427,6 +458,9 @@ export const gameRouter = router({
         redis.expire(`user:${username}:day:${dayId}:run:0:startTime`, TWO_DAYS),
         redis.expire(`user:${username}:day:${dayId}:run:1:startTime`, TWO_DAYS),
         redis.expire(`user:${username}:day:${dayId}:run:2:startTime`, TWO_DAYS),
+        redis.expire(`user:${username}:day:${dayId}:run:0:optimal`, TWO_DAYS),
+        redis.expire(`user:${username}:day:${dayId}:run:1:optimal`, TWO_DAYS),
+        redis.expire(`user:${username}:day:${dayId}:run:2:optimal`, TWO_DAYS),
         redis.expire(`user:${username}:day:${dayId}:totals`, TWO_DAYS),
         // Per-week keys (2-week TTL — relevant until week ends + a few days)
         redis.expire(`user:${username}:week:${weekId}:perfect_days`, TWO_WEEKS),
@@ -442,6 +476,7 @@ export const gameRouter = router({
 
       return { finalScore, bust: finalScore === 0, percentile };
     }),
+
 
     getLeaderboard: publicProcedure.query(async () => {
       const now = new Date();

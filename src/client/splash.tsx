@@ -116,6 +116,7 @@ const SplashContent = () => {
       <div className="fixed top-[-20%] left-[-10%] w-[60%] h-[60%] bg-red-600/10 rounded-full blur-[150px] pointer-events-none" />
       <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-cyan-600/5 rounded-full blur-[150px] pointer-events-none" />
 
+
       {/* Mute Toggle */}
       <button
         onClick={toggleMute}

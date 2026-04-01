@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { redis } from '@devvit/web/server';
+import { redis, reddit } from '@devvit/web/server';
+import type { T3 } from '@devvit/shared-types/tid.js';
 
 import { createWeeklyPost } from '../core/post.js';
 import { awardAndApplyFlair } from '../core/flair.js';
@@ -34,6 +35,38 @@ schedulerRoutes.post('/weekly-post', async (c) => {
     console.error(`[scheduler] Error creating weekly post: ${error}`);
     return c.json({}, 500);
   }
+});
+
+schedulerRoutes.post('/daily-anchor', async (c) => {
+  console.log('[scheduler] daily-anchor task fired');
+  const EPOCH_START = new Date('2024-01-01T00:00:00Z');
+  const now = new Date();
+  const dayId = Math.floor((now.getTime() - EPOCH_START.getTime()) / 86400000).toString();
+
+  const alreadyExists = await redis.get(`day:${dayId}:results_comment_id`);
+  if (alreadyExists) {
+    console.log(`[scheduler] daily-anchor already exists for dayId ${dayId}, skipping`);
+    return c.json({}, 200);
+  }
+
+  try {
+    const postId = await redis.get('active_post_id');
+    if (postId) {
+      const comment = await reddit.submitComment({
+        id: postId as T3,
+        text: `Day ${dayId} Highlights`,
+        runAs: 'APP',
+      });
+      await redis.set(`day:${dayId}:results_comment_id`, comment.id);
+      await redis.expire(`day:${dayId}:results_comment_id`, 172800);
+      console.log(`[scheduler] Day ${dayId} thread anchor created: ${comment.id}`);
+    } else {
+      console.log(`[scheduler] No active_post_id found, skipping daily-anchor for dayId ${dayId}`);
+    }
+  } catch (err) {
+    console.error(`[scheduler] Failed to create thread anchor: ${err}`);
+  }
+  return c.json({}, 200);
 });
 
 schedulerRoutes.post('/daily-snapshot', async (c) => {
