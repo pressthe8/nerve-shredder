@@ -57,6 +57,24 @@ There are exactly **3 fixed personalities** — one of each is used every day:
 - `STEP_DISPLAY_MS = 1000` — 1 second per step (in `src/shared/scoreEngine.ts`)
 - `LATENCY_BUFFER_MS = 1000` — timing tolerance (in `src/server/routers/index.ts`)
 
+### CRITICAL: Scheduler tasks must be declared in devvit.json
+**Every new cron/scheduler task requires two things:**
+1. A handler registered in `src/server/routes/scheduler.ts`
+2. A corresponding entry in `devvit.json` under `scheduler.tasks`
+
+If a task is missing from `devvit.json`, the cron will never fire even if the job is registered in Redis. Example:
+```json
+"scheduler": {
+  "tasks": {
+    "my-task": {
+      "endpoint": "/internal/scheduler/my-task"
+    }
+  }
+}
+```
+
+Similarly, new menu items require an entry in `devvit.json` under `menu.items` AND a handler in `src/server/routes/menu.ts`. Post-location menu items also require `"postFilter": "currentApp"` to appear on the game post's `...` menu, otherwise they won't show up.
+
 ### Known Issues to Monitor
 - Weekly leaderboard may appear empty if no users have completed runs this week
 - Leaderboards use `.reverse()` to show highest scores first (Redis zRange returns ascending order)

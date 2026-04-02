@@ -25,6 +25,14 @@
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/post-create"
+      },
+      {
+        "label": "[DEBUG] Fire daily anchor comment",
+        "description": "nerve-shredder",
+        "location": "post",
+        "forUserType": "moderator",
+        "postFilter": "currentApp",
+        "endpoint": "/internal/menu/debug-daily-anchor"
       }
     ]
   },
@@ -42,6 +50,9 @@
       },
       "daily-snapshot": {
         "endpoint": "/internal/scheduler/daily-snapshot"
+      },
+      "daily-anchor": {
+        "endpoint": "/internal/scheduler/daily-anchor"
       }
     }
   },

@@ -4,7 +4,7 @@ import type { T3 } from '@devvit/shared-types/tid.js';
 
 import { createWeeklyPost } from '../core/post.js';
 import { awardAndApplyFlair } from '../core/flair.js';
-import { getWeekId } from '../../shared/weekUtils.js';
+import { getWeekId, getDayOfWeek, getGameDayLabel } from '../../shared/weekUtils.js';
 
 export const schedulerRoutes = new Hono();
 
@@ -54,7 +54,7 @@ schedulerRoutes.post('/daily-anchor', async (c) => {
     if (postId) {
       const comment = await reddit.submitComment({
         id: postId as T3,
-        text: `Day ${dayId} Highlights`,
+        text: `${getGameDayLabel(getDayOfWeek(now))} Highlights`,
         runAs: 'APP',
       });
       await redis.set(`day:${dayId}:results_comment_id`, comment.id);
