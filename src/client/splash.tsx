@@ -15,6 +15,9 @@ const SplashContent = () => {
   const { data: weekInfo, isLoading: weekInfoLoading } = trpc.game.getPostWeekInfo.useQuery();
   const { data, isLoading } = trpc.game.getGameState.useQuery(undefined, {
     enabled: weekInfo?.isActiveWeek !== false,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
   const { data: dailyLeaderboard } = trpc.game.getLeaderboard.useQuery(undefined, {
     enabled: weekInfo?.isActiveWeek !== false,

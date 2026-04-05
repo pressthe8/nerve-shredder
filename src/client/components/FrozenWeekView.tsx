@@ -1,21 +1,24 @@
-import { useState } from 'react';
 import { navigateTo } from '@devvit/web/client';
+
+type FrozenLeaderboard = {
+  top3: Array<{ username: string; score: number }>;
+  totalPlayers: number;
+  currentUser: string | null;
+  currentUserRank: number | null;
+  currentUserScore: number | null;
+};
 
 type FrozenWeekViewProps = {
   weekLabel: string;
   activePostUrl: string | null;
-  leaderboard: Array<{ username: string; score: number }> | undefined;
+  leaderboard: FrozenLeaderboard | undefined;
 };
 
-const PAGE_SIZE = 10;
+const MEDALS = ['🏆', '🥈', '🥉'];
 
 export const FrozenWeekView = ({ weekLabel, activePostUrl, leaderboard }: FrozenWeekViewProps) => {
-  const [page, setPage] = useState(0);
-  const totalEntries = leaderboard?.length ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalEntries / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages - 1);
-  const pageEntries = leaderboard?.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE) ?? [];
-  const pageOffset = safePage * PAGE_SIZE;
+  const top3 = leaderboard?.top3 ?? [];
+  const totalPlayers = leaderboard?.totalPlayers ?? 0;
 
   return (
     <div className="flex flex-col items-center min-h-screen bg-neutral-950 text-white p-4 pt-8 font-mono cursor-crosshair relative">
@@ -32,77 +35,79 @@ export const FrozenWeekView = ({ weekLabel, activePostUrl, leaderboard }: Frozen
       <div className="text-amber-400 font-bold text-lg mb-1 text-glow-amber">
         {weekLabel}
       </div>
-      <div className="text-neutral-400 font-bold text-xs mb-6 tracking-[.3em] uppercase">
-        Final Standings
+      <div className="flex items-center gap-2 text-neutral-400 font-bold text-xs mb-6 tracking-[.3em] uppercase">
+        <span>Final Standings</span>
+        {totalPlayers > 0 && (
+          <>
+            <span className="text-neutral-600">·</span>
+            <span>{totalPlayers.toLocaleString()} Players</span>
+          </>
+        )}
       </div>
 
-      {/* Frozen Leaderboard */}
+      {/* Top 3 */}
       <div className="w-full max-w-md space-y-1.5 mb-4">
-        {totalEntries > 0 ? (
-          pageEntries.map((entry, i) => {
-            const globalIndex = pageOffset + i;
-            return (
-              <div
-                key={entry.username}
-                className={`flex items-center justify-between p-3 rounded-md ${
-                  globalIndex === 0
-                    ? 'bg-yellow-950/30 border border-yellow-700/50'
-                    : globalIndex === 1
-                      ? 'bg-neutral-800/50 border border-neutral-700'
-                      : globalIndex === 2
-                        ? 'bg-orange-950/30 border border-orange-900/50'
-                        : 'bg-neutral-900/30 border border-neutral-800'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <div className={`text-base font-black italic tracking-tighter w-8 text-right ${
-                    globalIndex === 0 ? 'text-yellow-400' : globalIndex === 1 ? 'text-neutral-300' : globalIndex === 2 ? 'text-orange-600' : 'text-neutral-500'
-                  }`}>
-                    #{globalIndex + 1}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {globalIndex === 0 && <span>🏆</span>}
-                    {globalIndex === 1 && <span>🥈</span>}
-                    {globalIndex === 2 && <span>🥉</span>}
-                    <span className="font-bold text-white text-sm tracking-wide">{entry.username}</span>
-                  </div>
+        {top3.length > 0 ? (
+          top3.map((entry, i) => (
+            <div
+              key={entry.username}
+              className={`flex items-center justify-between p-3 rounded-md ${
+                i === 0
+                  ? 'bg-yellow-950/30 border border-yellow-700/50'
+                  : i === 1
+                    ? 'bg-neutral-800/50 border border-neutral-700'
+                    : 'bg-orange-950/30 border border-orange-900/50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <div className={`text-base font-black italic tracking-tighter w-8 text-right ${
+                  i === 0 ? 'text-yellow-400' : i === 1 ? 'text-neutral-300' : 'text-orange-600'
+                }`}>
+                  #{i + 1}
                 </div>
-                <div className="text-base font-mono font-black italic tracking-tighter text-amber-400 text-glow-amber">
-                  £{entry.score.toLocaleString()}
+                <div className="flex items-center gap-1.5">
+                  <span>{MEDALS[i]}</span>
+                  <span className="font-bold text-white text-sm tracking-wide">{entry.username}</span>
                 </div>
               </div>
-            );
-          })
+              <div className="text-base font-mono font-black italic tracking-tighter text-amber-400 text-glow-amber">
+                £{entry.score.toLocaleString()}
+              </div>
+            </div>
+          ))
         ) : (
           <div className="text-center text-neutral-500 py-8">
             No scores recorded this week.
           </div>
         )}
-      </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center gap-4 mb-6">
-          <button
-            onClick={() => setPage(Math.max(0, safePage - 1))}
-            disabled={safePage === 0}
-            className="text-neutral-400 hover:text-white disabled:text-neutral-700 font-bold text-lg px-2"
-          >‹</button>
-          <span className="text-xs text-neutral-500 font-mono tracking-wider">{safePage + 1} / {totalPages}</span>
-          <button
-            onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
-            disabled={safePage === totalPages - 1}
-            className="text-neutral-400 hover:text-white disabled:text-neutral-700 font-bold text-lg px-2"
-          >›</button>
-        </div>
-      )}
+        {/* Current user if outside top 3 */}
+        {leaderboard?.currentUserRank !== null && leaderboard?.currentUserRank !== undefined && leaderboard.currentUserScore !== null && (
+          <>
+            <div className="text-center text-neutral-700 text-xs py-1">· · ·</div>
+            <div className="flex items-center justify-between p-3 rounded-md border border-dashed border-neutral-600 bg-neutral-900/50">
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-black italic tracking-tighter w-8 text-right text-neutral-500">
+                  #{leaderboard.currentUserRank}
+                </div>
+                <span className="font-bold text-neutral-400 text-sm tracking-wide">
+                  {leaderboard.currentUser} <span className="text-neutral-600 text-xs font-normal">(you)</span>
+                </span>
+              </div>
+              <div className="text-base font-mono font-black italic tracking-tighter text-amber-700">
+                £{leaderboard.currentUserScore.toLocaleString()}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
 
       {activePostUrl && (
         <button
           onClick={() => navigateTo(activePostUrl)}
           className="bg-red-600 hover:bg-red-500 transition-all duration-200 text-white font-black text-lg py-4 px-12 skew-x-[-12deg] shadow-[0_0_30px_rgba(220,38,38,0.5)] hover:shadow-[0_0_40px_rgba(220,38,38,0.7)] active:scale-95"
         >
-          <span className="inline-block skew-x-[12deg] tracking-wider">PLAY THIS WEEK</span>
+          <span className="inline-block skew-x-[12deg] tracking-wider">PLAY ACTIVE WEEK NOW</span>
         </button>
       )}
     </div>

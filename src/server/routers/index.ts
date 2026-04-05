@@ -229,6 +229,12 @@ export const gameRouter = router({
         throw new Error("Run already completed");
       }
 
+      // If a startTime already exists, this is a restart — soft-flag it
+      const existingStartTime = await redis.get(`user:${username}:day:${dayId}:run:${input.runIndex}:startTime`);
+      if (existingStartTime) {
+        void redis.incrBy(`flags:${username}:run_restarts`, 1);
+      }
+
       // Record start time (2-day TTL — ephemeral, only needed for anti-cheat timing during the run)
       const startTime = Date.now();
       const startTimeKey = `user:${username}:day:${dayId}:run:${input.runIndex}:startTime`;
@@ -472,6 +478,7 @@ export const gameRouter = router({
         redis.expire(`flags:${username}:top_percentile_runs`, THIRTY_DAYS),
         redis.expire(`flags:${username}:bong_proximity_runs`, THIRTY_DAYS),
         redis.expire(`flags:${username}:new_account_top_runs`, THIRTY_DAYS),
+        redis.expire(`flags:${username}:run_restarts`, THIRTY_DAYS),
       ]);
 
       return { finalScore, bust: finalScore === 0, percentile };
@@ -632,13 +639,42 @@ export const gameRouter = router({
     getFrozenLeaderboard: publicProcedure
       .input(z.object({ weekId: z.string() }))
       .query(async ({ input }) => {
-        const topScores = await redis.zRange(
-          `leaderboard:weekly:week:${input.weekId}`, 0, 49, { by: 'rank', reverse: true }
-        );
-        return topScores.map((entry: { member: string; score: number }) => ({
+        const user = await reddit.getCurrentUser();
+        const username = user?.username ?? 'anonymous';
+
+        const weekKey = `leaderboard:weekly:week:${input.weekId}`;
+        const [topScores, totalPlayers] = await Promise.all([
+          redis.zRange(weekKey, 0, 2, { by: 'rank', reverse: true }),
+          redis.zCard(weekKey),
+        ]);
+
+        const top3 = topScores.map((entry: { member: string; score: number }) => ({
           username: entry.member,
           score: entry.score,
         }));
+
+        const inTop3 = top3.some((e: { username: string }) => e.username === username);
+        let currentUserRank: number | null = null;
+        let currentUserScore: number | null = null;
+
+        if (!inTop3 && username !== 'anonymous') {
+          const [rankAsc, score] = await Promise.all([
+            redis.zRank(weekKey, username),
+            redis.zScore(weekKey, username),
+          ]);
+          if (rankAsc !== null && rankAsc !== undefined && score !== null && score !== undefined) {
+            currentUserRank = (totalPlayers ?? 0) - rankAsc;
+            currentUserScore = score;
+          }
+        }
+
+        return {
+          top3,
+          totalPlayers: totalPlayers ?? 0,
+          currentUser: inTop3 ? null : username,
+          currentUserRank,
+          currentUserScore,
+        };
       }),
 
     getWeeklyBreakdown: publicProcedure.query(async () => {
@@ -774,30 +810,34 @@ export const gameRouter = router({
         topPercentileRuns: number;
         bongProximityRuns: number;
         newAccountTopRuns: number;
+        runRestarts: number;
       }> = [];
 
       for (const entry of topPlayers) {
-        const [totalStr, topStr, proxStr, newAccStr] = await Promise.all([
+        const [totalStr, topStr, proxStr, newAccStr, restartsStr] = await Promise.all([
           redis.get(`flags:${entry.member}:total_runs`),
           redis.get(`flags:${entry.member}:top_percentile_runs`),
           redis.get(`flags:${entry.member}:bong_proximity_runs`),
-          redis.get(`flags:${entry.member}:new_account_top_runs`)
+          redis.get(`flags:${entry.member}:new_account_top_runs`),
+          redis.get(`flags:${entry.member}:run_restarts`),
         ]);
 
         const totalRuns = totalStr ? parseInt(totalStr, 10) : 0;
         const topPercentileRuns = topStr ? parseInt(topStr, 10) : 0;
         const bongProximityRuns = proxStr ? parseInt(proxStr, 10) : 0;
         const newAccountTopRuns = newAccStr ? parseInt(newAccStr, 10) : 0;
+        const runRestarts = restartsStr ? parseInt(restartsStr, 10) : 0;
 
         // Only include players with any flags
-        if (topPercentileRuns > 0 || bongProximityRuns > 0 || newAccountTopRuns > 0) {
+        if (topPercentileRuns > 0 || bongProximityRuns > 0 || newAccountTopRuns > 0 || runRestarts > 0) {
           results.push({
             username: entry.member,
             leaderboardScore: entry.score,
             totalRuns,
             topPercentileRuns,
             bongProximityRuns,
-            newAccountTopRuns
+            newAccountTopRuns,
+            runRestarts,
           });
         }
       }
