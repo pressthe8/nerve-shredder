@@ -331,8 +331,13 @@ export const gameRouter = router({
       const newTotal = (currentTotalStr ? parseInt(currentTotalStr, 10) : 0) + finalScore;
       await redis.hSet(`user:${username}:day:${dayId}:totals`, { score: newTotal.toString() });
 
-      // Update daily leaderboard
+      // Update daily leaderboard (cumulative total)
       await redis.zAdd(`leaderboard:daily:day:${dayId}`, { member: username, score: newTotal });
+
+      // Update per-run leaderboard (individual run score, for percentile feedback)
+      if (finalScore > 0) {
+        await redis.zAdd(`leaderboard:daily:day:${dayId}:run:${input.runIndex}`, { member: username, score: finalScore });
+      }
 
       // Check if all 3 runs are complete and successful (Perfect Day logic)
       const allScores = await Promise.all([
@@ -407,14 +412,17 @@ export const gameRouter = router({
       const weeklyTotal = await calculateWeeklyTotal(username, weekId);
       await redis.zAdd(`leaderboard:weekly:week:${weekId}`, { member: username, score: weeklyTotal });
 
-      // Calculate percentile rank for feedback
+      // Calculate percentile rank for feedback (per-run leaderboard, bucketed)
       let percentile: number | null = null;
       if (finalScore > 0) {
-        const userRank = await redis.zRank(`leaderboard:daily:day:${dayId}`, username);
-        const totalPlayers = await redis.zCard(`leaderboard:daily:day:${dayId}`);
+        const runLbKey = `leaderboard:daily:day:${dayId}:run:${input.runIndex}`;
+        const userRank = await redis.zRank(runLbKey, username);
+        const totalPlayers = await redis.zCard(runLbKey);
 
         if (userRank !== null && userRank !== undefined && totalPlayers >= 5) {
-          percentile = Math.max(1, Math.round((1 - userRank / totalPlayers) * 100));
+          const rawPercentile = Math.max(1, Math.round((1 - userRank / totalPlayers) * 100));
+          const BUCKETS = [5, 10, 20, 30, 40, 50];
+          percentile = BUCKETS.find(b => rawPercentile <= b) ?? null;
         }
       }
 
@@ -468,6 +476,10 @@ export const gameRouter = router({
         redis.expire(`user:${username}:day:${dayId}:run:1:optimal`, TWO_DAYS),
         redis.expire(`user:${username}:day:${dayId}:run:2:optimal`, TWO_DAYS),
         redis.expire(`user:${username}:day:${dayId}:totals`, TWO_DAYS),
+        // Per-run leaderboard keys (2-week TTL — same as daily leaderboard)
+        redis.expire(`leaderboard:daily:day:${dayId}:run:0`, TWO_WEEKS),
+        redis.expire(`leaderboard:daily:day:${dayId}:run:1`, TWO_WEEKS),
+        redis.expire(`leaderboard:daily:day:${dayId}:run:2`, TWO_WEEKS),
         // Per-week keys (2-week TTL — relevant until week ends + a few days)
         redis.expire(`user:${username}:week:${weekId}:perfect_days`, TWO_WEEKS),
         redis.expire(`user:${username}:week:${weekId}:daily_scores`, TWO_WEEKS),
