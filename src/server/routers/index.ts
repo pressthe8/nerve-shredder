@@ -392,7 +392,7 @@ export const gameRouter = router({
       const snapshotKey = `leaderboard:weekly:week:${weekId}:snapshot_day:${dayId}`;
       const snapshotExists = await redis.get(snapshotKey);
       if (!snapshotExists) {
-        const currentTopScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 49, { by: 'rank', reverse: true });
+        const currentTopScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 199, { by: 'rank', reverse: true });
         const snapshotEntries = currentTopScores.map((e: { member: string; score: number }) => ({
           username: e.member,
           score: e.score,
@@ -554,11 +554,26 @@ export const gameRouter = router({
         const snapshotData = await redis.get(snapshotKey);
         if (snapshotData) {
           const entries = JSON.parse(snapshotData) as Array<{ username: string; score: number }>;
+          const inList = entries.some((e) => e.username === username);
+          let currentUserRank: number | null = null;
+          let currentUserScore: number | null = null;
+          if (!inList) {
+            const rankAsc = await redis.zRank(`leaderboard:weekly:week:${weekId}`, username);
+            const score = await redis.zScore(`leaderboard:weekly:week:${weekId}`, username);
+            const total = await redis.zCard(`leaderboard:weekly:week:${weekId}`);
+            if (rankAsc !== null && rankAsc !== undefined && score !== null && score !== undefined) {
+              currentUserRank = total - rankAsc;
+              currentUserScore = score;
+            }
+          }
           return {
             locked: false as const,
             snapshot: true as const,
             snapshotDayLabel: dayOfWeek === 0 ? null : getGameDayLabel(dayOfWeek - 1),
             entries,
+            currentUser: username,
+            currentUserRank,
+            currentUserScore,
           };
         }
         // No snapshot yet (first day of week or nobody has played today)

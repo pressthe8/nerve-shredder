@@ -36,10 +36,12 @@ const SplashContent = () => {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [utils]);
+
   const { playSound, muted, toggleMute } = useSound();
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboardMode, setLeaderboardMode] = useState<'daily' | 'weekly'>('daily');
-  const [leaderboardPage, setLeaderboardPage] = useState(0);
+  const [manualPage, setManualPage] = useState<number | null>(null);
+  const [manualPageMode, setManualPageMode] = useState<'daily' | 'weekly' | null>(null);
   const PAGE_SIZE = 7;
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [showWeeklyBreakdown, setShowWeeklyBreakdown] = useState(false);
@@ -84,9 +86,9 @@ const SplashContent = () => {
   const isWeeklySnapshot = leaderboardMode === 'weekly' && (weeklyLeaderboard?.snapshot ?? false);
   const snapshotDayLabel = weeklyLeaderboard?.snapshotDayLabel;
   const currentLeaderboard = currentLeaderboardData?.entries;
-  const currentUser = isWeeklySnapshot ? null : ((currentLeaderboardData as { currentUser?: string | null } | undefined)?.currentUser ?? null);
-  const currentUserRank = isWeeklySnapshot ? null : ((currentLeaderboardData as { currentUserRank?: number | null } | undefined)?.currentUserRank ?? null);
-  const currentUserScore = isWeeklySnapshot ? null : ((currentLeaderboardData as { currentUserScore?: number | null } | undefined)?.currentUserScore ?? null);
+  const currentUser = (currentLeaderboardData as { currentUser?: string | null } | undefined)?.currentUser ?? null;
+  const currentUserRank = (currentLeaderboardData as { currentUserRank?: number | null } | undefined)?.currentUserRank ?? null;
+  const currentUserScore = (currentLeaderboardData as { currentUserScore?: number | null } | undefined)?.currentUserScore ?? null;
 
   // Show loading while checking week info
   if (weekInfoLoading) {
@@ -267,7 +269,7 @@ const SplashContent = () => {
             {/* Centred tabs */}
             <div className="flex gap-1">
               <button
-                onClick={() => { setLeaderboardMode('daily'); setLeaderboardPage(0); }}
+                onClick={() => { setLeaderboardMode('daily'); }}
                 className={`px-4 py-1.5 font-bold transition-all tracking-wider text-xs skew-x-[-8deg] ${
                   leaderboardMode === 'daily'
                     ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(34,211,238,0.3)]'
@@ -277,7 +279,7 @@ const SplashContent = () => {
                 <span className="inline-block skew-x-[8deg]">DAILY</span>
               </button>
               <button
-                onClick={() => { setLeaderboardMode('weekly'); setLeaderboardPage(0); }}
+                onClick={() => { setLeaderboardMode('weekly'); }}
                 className={`px-4 py-1.5 font-bold transition-all tracking-wider text-xs skew-x-[-8deg] ${
                   leaderboardMode === 'weekly'
                     ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(251,191,36,0.3)]'
@@ -300,12 +302,30 @@ const SplashContent = () => {
           {(() => {
             const totalEntries = currentLeaderboard?.length ?? 0;
             const totalPages = Math.max(1, Math.ceil(totalEntries / PAGE_SIZE));
-            const safePage = Math.min(leaderboardPage, totalPages - 1);
+
+            // Compute auto-page: land on user's page, or last page if outside top 200, or page 0
+            let autoPage = 0;
+            if (currentUser && currentLeaderboard) {
+              const idx = currentLeaderboard.findIndex((e: { username: string }) => e.username === currentUser);
+              if (idx >= 0) {
+                autoPage = Math.floor(idx / PAGE_SIZE);
+              } else if (currentUserRank !== null) {
+                autoPage = totalPages - 1;
+              }
+            } else if (currentUserRank !== null) {
+              autoPage = totalPages - 1;
+            }
+
+            // Use manual page if the user has explicitly navigated in this mode, otherwise auto
+            const rawPage = (manualPageMode === leaderboardMode && manualPage !== null) ? manualPage : autoPage;
+            const safePage = Math.min(rawPage, totalPages - 1);
             const pageEntries = currentLeaderboard?.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE) ?? [];
             const pageOffset = safePage * PAGE_SIZE;
 
             const renderEntry = (entry: { username: string; score: number; playedToday?: boolean }, index: number) => {
               const globalIndex = pageOffset + index;
+              const isCurrentUser = entry.username === currentUser;
+              const isPodium = globalIndex <= 2;
               return (
                 <button
                   key={entry.username}
@@ -317,7 +337,11 @@ const SplashContent = () => {
                         ? 'bg-neutral-800/50 border border-neutral-700'
                         : globalIndex === 2
                           ? 'bg-orange-950/30 border border-orange-900/50'
-                          : 'bg-neutral-900/30 border border-neutral-800'
+                          : isCurrentUser && leaderboardMode === 'daily'
+                            ? 'bg-cyan-950/40 border border-cyan-800/60'
+                            : isCurrentUser
+                              ? 'bg-amber-950/40 border border-amber-800/60'
+                              : 'bg-neutral-900/30 border border-neutral-800'
                   }`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
@@ -326,7 +350,9 @@ const SplashContent = () => {
                     }`}>
                       #{globalIndex + 1}
                     </div>
-                    <span className="font-bold text-white text-sm tracking-wide truncate">{entry.username}</span>
+                    <span className="font-bold text-white text-sm tracking-wide truncate">
+                      {entry.username}{isCurrentUser && !isPodium && <span className="text-neutral-500 text-xs font-normal ml-1">(you)</span>}
+                    </span>
                   </div>
                   <div className={`text-base font-mono font-black italic tracking-tighter shrink-0 ${
                     leaderboardMode === 'daily'
@@ -358,27 +384,6 @@ const SplashContent = () => {
                   )}
                 </div>
 
-                {/* Current user — always pinned at top when we have their data */}
-                {(() => {
-                  if (isLeaderboardLocked || isWeeklySnapshot || !currentUser) return null;
-                  const inListEntry = currentLeaderboard?.find((e: { username: string; score: number; playedToday?: boolean }) => e.username === currentUser);
-                  const inListIndex = currentLeaderboard?.findIndex((e: { username: string }) => e.username === currentUser) ?? -1;
-                  const rank = inListEntry && inListIndex >= 0 ? inListIndex + 1 : currentUserRank;
-                  const score = inListEntry ? inListEntry.score : currentUserScore;
-                  if (rank === null || score === null) return null;
-                  return (
-                    <div className="flex items-center justify-between gap-3 p-2 rounded w-full border border-dashed border-neutral-600 bg-neutral-900/50">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="text-sm font-black italic tracking-tighter shrink-0 w-8 text-right text-neutral-500">#{rank}</div>
-                        <span className="font-bold text-neutral-400 text-sm tracking-wide truncate">{currentUser} <span className="text-neutral-600 text-xs font-normal">(you)</span></span>
-                      </div>
-                      <div className={`text-base font-mono font-black italic tracking-tighter shrink-0 ${leaderboardMode === 'daily' ? 'text-cyan-700' : 'text-amber-700'}`}>
-                        £{score.toLocaleString()}
-                      </div>
-                    </div>
-                  );
-                })()}
-
                 {isLeaderboardLocked ? (
                   <div className="text-center py-8 px-4">
                     <div className="text-4xl mb-3">🔒</div>
@@ -393,9 +398,39 @@ const SplashContent = () => {
                     {totalEntries > 0 ? pageEntries.map((entry: { username: string; score: number; playedToday?: boolean }, i: number) => renderEntry(entry, i)) : (
                       <div className="text-center text-neutral-500 py-8">No scores yet. Be the first!</div>
                     )}
+                    {currentUser && currentUserRank !== null && currentUserScore !== null && safePage === totalPages - 1 && (
+                      <>
+                        <div className="text-center text-neutral-700 text-xs py-1">· · ·</div>
+                        <div className="flex items-center justify-between gap-3 p-2 rounded w-full border border-dashed border-neutral-600 bg-neutral-900/50">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="text-sm font-black italic tracking-tighter shrink-0 w-8 text-right text-neutral-500">#{currentUserRank}</div>
+                            <span className="font-bold text-neutral-400 text-sm tracking-wide truncate">{currentUser} <span className="text-neutral-600 text-xs font-normal">(you)</span></span>
+                          </div>
+                          <div className="text-base font-mono font-black italic tracking-tighter shrink-0 text-amber-700">
+                            £{currentUserScore.toLocaleString()}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </>
                 ) : totalEntries > 0 ? (
-                  pageEntries.map((entry: { username: string; score: number; playedToday?: boolean }, i: number) => renderEntry(entry, i))
+                  <>
+                    {pageEntries.map((entry: { username: string; score: number; playedToday?: boolean }, i: number) => renderEntry(entry, i))}
+                    {currentUser && currentUserRank !== null && currentUserScore !== null && safePage === totalPages - 1 && (
+                      <>
+                        <div className="text-center text-neutral-700 text-xs py-1">· · ·</div>
+                        <div className="flex items-center justify-between gap-3 p-2 rounded w-full border border-dashed border-neutral-600 bg-neutral-900/50">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="text-sm font-black italic tracking-tighter shrink-0 w-8 text-right text-neutral-500">#{currentUserRank}</div>
+                            <span className="font-bold text-neutral-400 text-sm tracking-wide truncate">{currentUser} <span className="text-neutral-600 text-xs font-normal">(you)</span></span>
+                          </div>
+                          <div className={`text-base font-mono font-black italic tracking-tighter shrink-0 ${leaderboardMode === 'daily' ? 'text-cyan-700' : 'text-amber-700'}`}>
+                            £{currentUserScore.toLocaleString()}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </>
                 ) : (
                   <div className="text-center text-neutral-500 py-8">No scores yet. Be the first!</div>
                 )}
@@ -404,12 +439,12 @@ const SplashContent = () => {
                 {!isLeaderboardLocked && totalPages > 1 && (
                   <div className="flex items-center justify-center gap-2 pt-1">
                     <button
-                      onClick={() => setLeaderboardPage(0)}
+                      onClick={() => { setManualPage(0); setManualPageMode(leaderboardMode); }}
                       disabled={safePage === 0}
                       className="text-neutral-400 hover:text-white disabled:text-neutral-700 font-bold text-lg px-1"
                     >«</button>
                     <button
-                      onClick={() => setLeaderboardPage(Math.max(0, safePage - 1))}
+                      onClick={() => { setManualPage(Math.max(0, safePage - 1)); setManualPageMode(leaderboardMode); }}
                       disabled={safePage === 0}
                       className="text-neutral-400 hover:text-white disabled:text-neutral-700 font-bold text-lg px-1"
                     >‹</button>
@@ -417,12 +452,12 @@ const SplashContent = () => {
                       {safePage + 1} / {totalPages}
                     </span>
                     <button
-                      onClick={() => setLeaderboardPage(Math.min(totalPages - 1, safePage + 1))}
+                      onClick={() => { setManualPage(Math.min(totalPages - 1, safePage + 1)); setManualPageMode(leaderboardMode); }}
                       disabled={safePage === totalPages - 1}
                       className="text-neutral-400 hover:text-white disabled:text-neutral-700 font-bold text-lg px-1"
                     >›</button>
                     <button
-                      onClick={() => setLeaderboardPage(totalPages - 1)}
+                      onClick={() => { setManualPage(totalPages - 1); setManualPageMode(leaderboardMode); }}
                       disabled={safePage === totalPages - 1}
                       className="text-neutral-400 hover:text-white disabled:text-neutral-700 font-bold text-lg px-1"
                     >»</button>
