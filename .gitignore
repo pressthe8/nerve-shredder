@@ -2,6 +2,9 @@ node_modules
 .DS_Store
 dist
 .env
+.claude/
+CLAUDE.md
+AGENTS.md
 
 # Prevent stale .js files from shadowing .ts sources during Vite builds.
 # TypeScript imports use .js extensions (e.g. './routers/index.js'), so if a

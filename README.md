@@ -29,7 +29,7 @@ Complete all 3 runs without busting to earn a **Perfect Day**. Each Perfect Day 
 
 1. Install Nerve Shredder from the [Reddit App Directory](https://developers.reddit.com/apps/nerve-shredder)
 2. A weekly post will be created automatically on install
-3. New posts are created every Monday at 00:00 UTC via a scheduled job
+3. New posts are created every Monday at 00:05 UTC via a scheduled job
 
 ### Creating a post manually
 
