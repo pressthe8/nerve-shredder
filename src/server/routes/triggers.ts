@@ -18,6 +18,8 @@ export const triggers = new Hono();
  * Schedule the weekly cron job if it doesn't already exist.
  * Fires every Monday at 00:00 UTC to create a new weekly post.
  */
+const WEEKLY_POST_CRON = '5 0 * * MON';
+
 const ensureWeeklyCronScheduled = async (): Promise<void> => {
   const existingJobId = await redis.get('scheduler:weekly_post_job_id');
   if (existingJobId) return;
@@ -25,10 +27,24 @@ const ensureWeeklyCronScheduled = async (): Promise<void> => {
   const sched = await getScheduler();
   const jobId = await sched.runJob({
     name: 'weekly-post',
-    cron: '0 0 * * MON',
+    cron: WEEKLY_POST_CRON,
   });
   await redis.set('scheduler:weekly_post_job_id', jobId);
   console.log(`[triggers] Scheduled weekly-post cron job: ${jobId}`);
+};
+
+/**
+ * Re-register the weekly-post cron with the updated schedule.
+ * Clears the stored job ID so ensureWeeklyCronScheduled will re-create it.
+ */
+const migrateWeeklyCronIfNeeded = async (): Promise<void> => {
+  const storedCron = await redis.get('scheduler:weekly_post_cron');
+  if (storedCron === WEEKLY_POST_CRON) return;
+
+  // Clear the old job ID so ensureWeeklyCronScheduled re-registers with the new cron
+  await redis.del('scheduler:weekly_post_job_id');
+  await redis.set('scheduler:weekly_post_cron', WEEKLY_POST_CRON);
+  console.log(`[triggers] weekly-post cron migrated to ${WEEKLY_POST_CRON}`);
 };
 
 /**
@@ -95,6 +111,9 @@ triggers.post('/on-app-install', async (c) => {
 
 triggers.post('/on-app-upgrade', async (c) => {
   try {
+    // Migrate weekly-post cron to updated schedule if needed
+    await migrateWeeklyCronIfNeeded();
+
     // Ensure the cron jobs exist for pre-existing installations
     await ensureWeeklyCronScheduled();
     await ensureDailySnapshotCronScheduled();

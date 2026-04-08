@@ -21,18 +21,10 @@
     "items": [
       {
         "label": "Create a new post",
-        "description": "nerve-shredder",
+        "description": "Create a new weekly Nerve Shredder post in this subreddit",
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/post-create"
-      },
-      {
-        "label": "[DEBUG] Fire daily anchor comment",
-        "description": "nerve-shredder",
-        "location": "post",
-        "forUserType": "moderator",
-        "postFilter": "currentApp",
-        "endpoint": "/internal/menu/debug-daily-anchor"
       }
     ]
   },

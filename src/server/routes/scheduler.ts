@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { redis, reddit } from '@devvit/web/server';
+import { redis, reddit, context } from '@devvit/web/server';
 import type { T3 } from '@devvit/shared-types/tid.js';
 
 import { createWeeklyPost } from '../core/post.js';
@@ -12,29 +12,50 @@ schedulerRoutes.post('/weekly-post', async (c) => {
   const body = await c.req.json<{ name: string }>();
   console.log(`[scheduler] weekly-post task fired: ${body.name}`);
 
-  try {
-    // Award weekly flairs for the week that just ended
-    const now = new Date();
-    // The cron fires at Monday 00:00 UTC — the ending week is the previous week
-    const prevWeekDate = new Date(now.getTime() - 7 * 86400000);
-    const prevWeekId = getWeekId(prevWeekDate);
-    const top3 = await redis.zRange(`leaderboard:weekly:week:${prevWeekId}`, 0, 2, {
-      by: 'rank',
-      reverse: true,
-    });
-    for (let i = 0; i < top3.length; i++) {
-      const flair = i === 0 ? 'weekly_winner' : 'weekly_podium';
-      await awardAndApplyFlair(top3[i]!.member, flair);
-    }
-    console.log(`[scheduler] weekly flairs awarded for week ${prevWeekId}, ${top3.length} players`);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      // Award weekly flairs for the week that just ended
+      const now = new Date();
+      // The cron fires at Monday 00:05 UTC — the ending week is the previous week
+      const prevWeekDate = new Date(now.getTime() - 7 * 86400000);
+      const prevWeekId = getWeekId(prevWeekDate);
+      const top3 = await redis.zRange(`leaderboard:weekly:week:${prevWeekId}`, 0, 2, {
+        by: 'rank',
+        reverse: true,
+      });
+      for (let i = 0; i < top3.length; i++) {
+        const flair = i === 0 ? 'weekly_winner' : 'weekly_podium';
+        await awardAndApplyFlair(top3[i]!.member, flair);
+      }
+      console.log(`[scheduler] weekly flairs awarded for week ${prevWeekId}, ${top3.length} players`);
 
-    const result = await createWeeklyPost();
-    console.log(`[scheduler] Weekly post ${result.alreadyExisted ? 'already existed' : 'created'}: ${result.id}`);
-    return c.json({}, 200);
-  } catch (error) {
-    console.error(`[scheduler] Error creating weekly post: ${error}`);
-    return c.json({}, 500);
+      const result = await createWeeklyPost();
+      console.log(`[scheduler] Weekly post ${result.alreadyExisted ? 'already existed' : 'created'}: ${result.id}`);
+      return c.json({}, 200);
+    } catch (error) {
+      lastError = error;
+      console.error(`[scheduler] weekly-post attempt ${attempt} failed: ${error}`);
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 2000 * attempt));
+    }
   }
+
+  console.error(`[scheduler] weekly-post all retries exhausted: ${lastError}`);
+
+  // Alert mods via modmail so they can manually recover
+  try {
+    await reddit.modMail.createConversation({
+      subredditName: context.subredditName ?? 'NerveShredder',
+      subject: 'Nerve Shredder: weekly-post cron failed',
+      body: `The weekly-post scheduler task failed after 3 attempts on ${new Date().toUTCString()}.\n\nLast error: ${lastError}\n\nUse the **"Create a new post"** subreddit menu item to recover.`,
+      isAuthorHidden: false,
+    });
+    console.log('[scheduler] modmail alert sent to mods');
+  } catch (mailErr) {
+    console.error(`[scheduler] failed to send modmail alert: ${mailErr}`);
+  }
+
+  return c.json({}, 500);
 });
 
 schedulerRoutes.post('/daily-anchor', async (c) => {
