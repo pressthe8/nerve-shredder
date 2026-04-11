@@ -25,6 +25,14 @@
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/post-create"
+      },
+      {
+        "label": "View Activity Stats",
+        "description": "Send today's and this week's player counts to modmail",
+        "location": "post",
+        "forUserType": "moderator",
+        "postFilter": "currentApp",
+        "endpoint": "/internal/menu/activity-stats"
       }
     ]
   },
