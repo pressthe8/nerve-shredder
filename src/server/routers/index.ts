@@ -183,6 +183,7 @@ export const gameRouter = router({
     const weekMultiplier = getWeeklyMultiplier(weekPerfectDaysCount);
 
     const weeklyScore = await calculateWeeklyTotal(username, weekId);
+    const joinedSub = await redis.get(`user:${username}:joined_sub`);
 
     // We also need to determine the user's run order. If missing, generate one.
     const runOrderStr = await redis.hGet(`user:${username}:day:${dayId}:totals`, 'runOrder');
@@ -208,8 +209,25 @@ export const gameRouter = router({
       weekMultiplier,
       lifetimePerfectDays: lifetimePerfectDaysStr ? parseInt(lifetimePerfectDaysStr, 10) : 0,
       weekPerfectDays: weekPerfectDaysCount,
-      weeklyScore
+      weeklyScore,
+      hasJoinedSub: joinedSub === '1'
     };
+  }),
+
+  joinSubreddit: publicProcedure.mutation(async () => {
+    const user = await reddit.getCurrentUser();
+    const username = user?.username;
+    console.log(`[joinSubreddit] username=${username ?? 'null'}`);
+    if (!username) return { ok: false };
+    try {
+      await reddit.subscribeToCurrentSubreddit();
+      console.log(`[joinSubreddit] subscribed ok`);
+    } catch (e) {
+      console.error(`[joinSubreddit] subscribe failed:`, e);
+    }
+    await redis.set(`user:${username}:joined_sub`, '1');
+    console.log(`[joinSubreddit] redis flag set`);
+    return { ok: true };
   }),
 
   startRun: publicProcedure

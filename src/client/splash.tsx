@@ -48,6 +48,8 @@ const SplashContent = () => {
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [countdown, setCountdown] = useState('');
   const [msUntilMidnight, setMsUntilMidnight] = useState(Infinity);
+  const [joinedLocally, setJoinedLocally] = useState(false);
+  const joinSubreddit = trpc.game.joinSubreddit.useMutation();
 
   useEffect(() => {
     let prev = Infinity;
@@ -242,23 +244,57 @@ const SplashContent = () => {
                     <span className="inline-block skew-x-[12deg] tracking-wider">PLAY NEXT RUN</span>
                   </button>
                 </div>
-              ) : (
-                <div className="flex flex-col items-center gap-1">
-                  <div className="text-cyan-400 font-bold bg-cyan-500/10 px-8 py-3 skew-x-[-12deg] border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.15)]">
-                    <span className="inline-block skew-x-[12deg] tracking-wider text-sm">ALL RUNS COMPLETED</span>
+              ) : (() => {
+                const showCta = !joinedLocally && !data?.hasJoinedSub && !!data?.username && data.username !== 'anonymous';
+                return showCta ? (
+                  <div className="flex flex-col items-center gap-1 w-full mt-2">
+                    <div className="text-neutral-500 text-xs font-medium tracking-wider mb-1">3 runs a day — don't miss tomorrow</div>
+                    <button
+                      onClick={() => {
+                        setJoinedLocally(true);
+                        joinSubreddit.mutate(undefined, {
+                          onError: () => setJoinedLocally(false),
+                        });
+                      }}
+                      disabled={joinSubreddit.isPending}
+                      className="bg-amber-500 hover:bg-amber-400 transition-all duration-200 text-black font-black text-sm py-3 px-10 skew-x-[-12deg] shadow-[0_0_20px_rgba(245,158,11,0.4)] hover:shadow-[0_0_30px_rgba(245,158,11,0.6)] active:scale-95 disabled:opacity-60 mb-2"
+                    >
+                      <span className="inline-block skew-x-[12deg] tracking-wider">
+                        {joinSubreddit.isPending ? 'JOINING...' : 'JOIN r/NERVESHREDDER'}
+                      </span>
+                    </button>
+                    <div className="flex items-center gap-3 w-full justify-center">
+                      <div className="text-neutral-500 text-xs font-mono tracking-widest uppercase">
+                        Next: <span className="text-amber-400">{countdown}</span>
+                      </div>
+                      <div className="text-neutral-600">|</div>
+                      <button
+                        onClick={() => { setShowLeaderboard(true); }}
+                        className="text-neutral-400 hover:text-white transition-colors text-xs font-bold flex items-center gap-1 tracking-[.2em] uppercase bg-neutral-800 hover:bg-neutral-700 px-3 py-1 skew-x-[-8deg]"
+                      >
+                        <span className="inline-block skew-x-[8deg]">🏆 Leaderboard</span>
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-neutral-500 text-xs font-mono tracking-widest uppercase">
-                    Next attempt: <span className="text-amber-400">{countdown}</span>
+                ) : (
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="text-center">
+                      <div className="text-neutral-500 text-xs font-mono tracking-widest uppercase mb-1">NEXT ATTEMPT IN</div>
+                      <div className="text-4xl font-mono font-black italic text-amber-400 tracking-tighter">{countdown}</div>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
-              <button
-                onClick={() => { setShowLeaderboard(true); }}
-                className="text-neutral-400 hover:text-white transition-colors text-xs font-bold flex items-center gap-2 tracking-[.2em] uppercase"
-              >
-                🏆 View Leaderboard
-              </button>
+              {/* Leaderboard link — only shown when not in CTA mode (CTA mode has it inline) */}
+              {(joinedLocally || !!data?.hasJoinedSub || !data?.username || data.username === 'anonymous') && (
+                <button
+                  onClick={() => { setShowLeaderboard(true); }}
+                  className="text-neutral-400 hover:text-white transition-colors text-xs font-bold flex items-center gap-2 tracking-[.2em] uppercase"
+                >
+                  🏆 View Leaderboard
+                </button>
+              )}
 
             </div>
           )}

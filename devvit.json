@@ -59,7 +59,10 @@
   "permissions": {
     "redis": true,
     "reddit": {
-      "enable": true
+      "enable": true,
+      "asUser": [
+        "SUBSCRIBE_TO_SUBREDDIT"
+      ]
     }
   },
   "scripts": {
