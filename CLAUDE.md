@@ -4,6 +4,8 @@
 
 **IMPORTANT**: All code written for this project must follow the guidelines in [AGENTS.md](AGENTS.md).
 
+For UI and visual changes, refer to [DESIGN.md](DESIGN.md) for the established design system — button styles, colour palette, layout patterns, and typography.
+
 ## Recent Changes
 
 ### Implemented Features (Phases 1-3)

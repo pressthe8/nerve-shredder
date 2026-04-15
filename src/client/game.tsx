@@ -22,22 +22,6 @@ const GameContent = () => {
   const [percentile, setPercentile] = useState<number | null>(null);
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [isLastRun, setIsLastRun] = useState(false);
-  const [nextResetCountdown, setNextResetCountdown] = useState('');
-
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
-      const diff = midnight.getTime() - now.getTime();
-      const h = Math.floor(diff / 3600000);
-      const m = Math.floor((diff % 3600000) / 60000);
-      const s = Math.floor((diff % 60000) / 1000);
-      setNextResetCountdown(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stepIndexRef = useRef<number>(0);
@@ -270,48 +254,55 @@ const GameContent = () => {
       )}
 
       <div className="flex-1 flex flex-col items-center justify-center w-full max-w-sm">
-        {phase === 'IDLE' && (
-           <div className="text-center animate-in fade-in zoom-in duration-300">
-             <h2 className="text-3xl font-black italic tracking-tighter mb-12 text-neutral-300">Ready for Run {gameState ? gameState.runOrder.indexOf(activeRunIndex!) + 1 : 1}?</h2>
-             <button onClick={() => void executeRun()} disabled={startRun.isPending} className="w-48 h-48 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-black text-4xl shadow-[0_0_50px_rgba(37,99,235,0.6)] hover:shadow-[0_0_60px_rgba(37,99,235,0.8)] transition-all active:scale-90">START</button>
-           </div>
-        )}
-
-        {phase === 'RUNNING' && (
-          <div className="flex flex-col flex-1 w-full justify-between py-12">
-            <div className="text-center flex-1 flex flex-col justify-center">
-              <div className="text-neutral-400 font-bold tracking-[.3em] text-xs mb-4">POTENTIAL WINNINGS</div>
-              <div
-                key={stepIndexRef.current}
-                className="text-7xl md:text-8xl py-4 font-mono font-black italic text-emerald-400 tracking-tighter drop-shadow-2xl animate-[pulse_0.3s_ease-in-out] text-glow-emerald"
-              >
-                £{amount.toLocaleString()}
-              </div>
+        {/* Two-zone layout for IDLE / RUNNING / BANKED / BUSTED */}
+        {(phase === 'IDLE' || phase === 'RUNNING' || phase === 'BANKED' || phase === 'BUSTED') && (
+          <div className="w-full flex flex-col">
+            {/* Fixed-height message area */}
+            <div className="h-48 flex flex-col items-center justify-center text-center">
+              {phase === 'IDLE' && (
+                <h2 className="text-3xl font-black italic tracking-tighter text-neutral-300 animate-in fade-in duration-300">Ready for Run {gameState ? gameState.runOrder.indexOf(activeRunIndex!) + 1 : 1}?</h2>
+              )}
+              {phase === 'RUNNING' && (
+                <div className="animate-in fade-in duration-300">
+                  <div className="text-neutral-400 font-bold tracking-[.3em] text-xs mb-4">POTENTIAL WINNINGS</div>
+                  <div key={stepIndexRef.current} className="text-7xl md:text-8xl py-4 font-mono font-black italic text-emerald-400 tracking-tighter drop-shadow-2xl animate-[pulse_0.3s_ease-in-out] text-glow-emerald">
+                    £{amount.toLocaleString()}
+                  </div>
+                </div>
+              )}
+              {phase === 'BANKED' && (
+                <div className="text-center animate-in zoom-in duration-300">
+                  <h2 className="text-5xl font-black italic text-emerald-500 mb-2 tracking-tighter drop-shadow-xl text-glow-emerald">BANKED!</h2>
+                  <div className="text-4xl font-mono font-black italic text-white mb-2 tracking-tighter">+£{amount.toLocaleString()}</div>
+                  {percentile !== null && (
+                    <div className="text-emerald-400 font-bold text-lg animate-in fade-in-50 duration-500 delay-300">Top {percentile}% of players</div>
+                  )}
+                </div>
+              )}
+              {phase === 'BUSTED' && (
+                <div className="text-center animate-in zoom-in duration-100">
+                  <h2 className="text-6xl font-black italic text-red-500 mb-3 tracking-tighter text-glow-red">CRASH!</h2>
+                  <div className="text-lg text-red-300/80 font-medium">You waited too long and lost it all.</div>
+                </div>
+              )}
             </div>
-            <button onClick={handleBank} disabled={bankRun.isPending} className="w-full py-8 bg-red-600 hover:bg-red-500 text-white font-black text-4xl tracking-widest shadow-[0_0_50px_rgba(220,38,38,0.5)] active:scale-95 transition-transform flex items-center justify-center skew-x-[-12deg]">
-              <span className="inline-block skew-x-[12deg]">BANK</span>
-            </button>
-          </div>
-        )}
 
-        {phase === 'BANKED' && (
-          <div className="text-center animate-in zoom-in duration-300">
-             <h2 className="text-5xl font-black italic text-emerald-500 mb-4 tracking-tighter drop-shadow-xl text-glow-emerald">BANKED!</h2>
-             <div className="text-4xl font-mono font-black italic text-white mb-4 tracking-tighter">+£{amount.toLocaleString()}</div>
-             {percentile !== null && (
-               <div className="text-emerald-400 font-bold text-xl mb-8 animate-in fade-in-50 duration-500 delay-300">
-                 Top {percentile}% of players
-               </div>
-             )}
-             <button onClick={startNextRun} className="px-10 py-4 w-full rounded-full bg-white text-black font-black hover:bg-neutral-200 active:scale-95 transition-transform">{isLastRun ? 'View Results' : 'Continue to Next Run'}</button>
-          </div>
-        )}
-
-        {phase === 'BUSTED' && (
-          <div className="text-center animate-in zoom-in duration-100">
-             <h2 className="text-6xl font-black italic text-red-500 mb-4 tracking-tighter text-glow-red">CRASH!</h2>
-             <div className="text-lg text-red-300/80 mb-12 font-medium">You waited too long and lost it all.</div>
-             <button onClick={startNextRun} className="px-10 py-4 w-full rounded-full bg-white/10 border border-white/20 text-white font-black hover:bg-white/20 active:scale-95 transition-transform">{isLastRun ? 'View Results' : 'Continue'}</button>
+            {/* Button slot — always at the same position */}
+            {phase === 'IDLE' && (
+              <button onClick={() => void executeRun()} disabled={startRun.isPending} className="w-full py-8 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-4xl tracking-widest shadow-[0_0_50px_rgba(16,185,129,0.5)] active:scale-95 transition-transform flex items-center justify-center skew-x-[-12deg]">
+                <span className="inline-block skew-x-[12deg]">START</span>
+              </button>
+            )}
+            {phase === 'RUNNING' && (
+              <button onClick={handleBank} disabled={bankRun.isPending} className="w-full py-8 bg-red-600 hover:bg-red-500 text-white font-black text-4xl tracking-widest shadow-[0_0_50px_rgba(220,38,38,0.5)] active:scale-95 transition-transform flex items-center justify-center skew-x-[-12deg]">
+                <span className="inline-block skew-x-[12deg]">BANK</span>
+              </button>
+            )}
+            {(phase === 'BANKED' || phase === 'BUSTED') && (
+              <button onClick={startNextRun} className="w-full py-8 bg-neutral-700 hover:bg-neutral-600 text-white font-black text-2xl tracking-widest active:scale-95 transition-transform flex items-center justify-center skew-x-[-12deg]">
+                <span className="inline-block skew-x-[12deg]">{isLastRun ? 'VIEW RESULTS' : 'CONTINUE'}</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -340,10 +331,9 @@ const GameContent = () => {
                </div>
              )}
 
-             <div className="text-neutral-500 text-xs font-mono tracking-widest uppercase mb-2">
-               Next attempt: <span className="text-amber-400">{nextResetCountdown}</span>
-             </div>
-             <button onClick={(e) => exitExpandedMode(e.nativeEvent)} className="px-10 py-4 w-full rounded-full bg-neutral-800 text-white font-black hover:bg-neutral-700 active:scale-95 transition-transform">Back to Home</button>
+             <button onClick={(e) => exitExpandedMode(e.nativeEvent)} className="w-full py-8 bg-neutral-700 hover:bg-neutral-600 text-white font-black text-2xl tracking-widest active:scale-95 transition-transform flex items-center justify-center skew-x-[-12deg]">
+               <span className="inline-block skew-x-[12deg]">BACK TO HOME</span>
+             </button>
           </div>
         )}
       </div>
