@@ -331,7 +331,7 @@ const GameContent = () => {
                </div>
              )}
 
-             <button onClick={(e) => exitExpandedMode(e.nativeEvent)} className="w-full py-8 bg-neutral-700 hover:bg-neutral-600 text-white font-black text-2xl tracking-widest active:scale-95 transition-transform flex items-center justify-center skew-x-[-12deg]">
+             <button onClick={(e) => exitExpandedMode(e.nativeEvent)} className="w-full py-3 bg-neutral-700 hover:bg-neutral-600 text-white font-black text-base tracking-widest active:scale-95 transition-transform flex items-center justify-center skew-x-[-12deg]">
                <span className="inline-block skew-x-[12deg]">BACK TO HOME</span>
              </button>
           </div>

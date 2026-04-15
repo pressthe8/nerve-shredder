@@ -49,7 +49,7 @@ const SplashContent = () => {
   const [countdown, setCountdown] = useState('');
   const [msUntilMidnight, setMsUntilMidnight] = useState(Infinity);
   const [joinedLocally, setJoinedLocally] = useState(false);
-  const joinSubreddit = trpc.game.joinSubreddit.useMutation();
+  const [joinPending, setJoinPending] = useState(false);
 
   useEffect(() => {
     let prev = Infinity;
@@ -250,17 +250,24 @@ const SplashContent = () => {
                   <div className="flex flex-col items-center gap-1 w-full mt-2">
                     <div className="text-neutral-500 text-xs font-medium tracking-wider mb-1">3 runs a day — don't miss tomorrow</div>
                     <button
-                      onClick={() => {
-                        setJoinedLocally(true);
-                        joinSubreddit.mutate(undefined, {
-                          onError: () => setJoinedLocally(false),
-                        });
+                      onClick={async () => {
+                        setJoinPending(true);
+                        try {
+                          const res = await fetch('/api/subscribe', { method: 'POST' });
+                          if (res.ok) {
+                            setJoinedLocally(true);
+                          }
+                        } catch {
+                          // ignore
+                        } finally {
+                          setJoinPending(false);
+                        }
                       }}
-                      disabled={joinSubreddit.isPending}
+                      disabled={joinPending}
                       className="bg-amber-500 hover:bg-amber-400 transition-all duration-200 text-black font-black text-sm py-3 px-10 skew-x-[-12deg] shadow-[0_0_20px_rgba(245,158,11,0.4)] hover:shadow-[0_0_30px_rgba(245,158,11,0.6)] active:scale-95 disabled:opacity-60 mb-2"
                     >
                       <span className="inline-block skew-x-[12deg] tracking-wider">
-                        {joinSubreddit.isPending ? 'JOINING...' : 'JOIN r/NERVESHREDDER'}
+                        {joinPending ? 'JOINING...' : 'JOIN r/NERVESHREDDER'}
                       </span>
                     </button>
                     <div className="flex items-center gap-3 w-full justify-center">
