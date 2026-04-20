@@ -6,13 +6,18 @@ export type RunPersonality = {
   jumpChance: number;
   dipChance: number;
   initialSpikeChance: number;
+  jumpMultiplierRange: [number, number];
 };
 
-/** Tick quantization interval in milliseconds (legacy — kept for backward compat) */
-export const TICK_MS = 50;
-
-/** How long each step is displayed in the new sequence-based mechanic */
+/** How long each step is displayed in the sequence-based mechanic */
 export const STEP_DISPLAY_MS = 1000;
+
+/** Per-step scaling applied to base increment after a 1-step warm-up */
+export const ACCEL_BASE_PER_STEP = 0.15;
+/** Per-step additive bump applied to jump chance after a 1-step warm-up */
+export const ACCEL_JUMP_PER_STEP = 0.02;
+/** Hard cap so jump chance never runs away on very long runs */
+export const JUMP_CHANCE_CAP = 0.60;
 
 /**
  * mulberry32: deterministic 32-bit PRNG.
@@ -41,68 +46,6 @@ export const hashSeed = (dayId: string, runIndex: number): number => {
 };
 
 /**
- * Compute the exact score at a given elapsed time.
- *
- * Both client and server call this with identical inputs to get identical output.
- * The PRNG is advanced the same number of times regardless of which branch is taken
- * at each tick (critical for determinism).
- *
- * Algorithm:
- * - Start at score = 10
- * - Tick 0: initial spike check (consumes 2 RNG calls)
- * - Each subsequent tick consumes exactly 3 RNG calls:
- *   Roll 1 = branch selector, Roll 2 = base increment, Roll 3 = branch magnitude
- * - Dip: subtract baseIncrement * (0.5 + roll3 * 1.5)
- * - Jump: add baseIncrement * (2 + roll3 * 4)
- * - Normal: add baseIncrement (roll3 consumed but unused)
- * - Floor at 1 after every tick
- */
-export const computeScoreAtMs = (
-  seed: number,
-  personality: RunPersonality,
-  elapsedMs: number
-): number => {
-  const tickCount = Math.floor(elapsedMs / TICK_MS);
-  const rng = mulberry32(seed);
-  let score = 10;
-
-  // --- Tick 0: initial spike (always consumes exactly 2 RNG calls) ---
-  const spikeRoll = rng();
-  if (spikeRoll < personality.initialSpikeChance) {
-    const spikeMultiplier = 3 + rng() * 5; // 3x to 8x
-    score = Math.floor(score * spikeMultiplier);
-  } else {
-    rng(); // consume to keep RNG in sync
-  }
-
-  // --- Ticks 1..N (each consumes exactly 3 RNG calls) ---
-  const [lo, hi] = personality.baseIncrementRange;
-  for (let t = 1; t <= tickCount; t++) {
-    const roll = rng();                       // Roll 1: branch selector
-    const baseIncrement = lo + rng() * (hi - lo); // Roll 2: increment size
-    const roll3 = rng();                      // Roll 3: branch magnitude
-
-    if (roll < personality.dipChance) {
-      // Dip — counter drops
-      const dipAmount = baseIncrement * (0.5 + roll3 * 1.5);
-      score -= dipAmount;
-    } else if (roll < personality.dipChance + personality.jumpChance) {
-      // Jump — large upward spike
-      const jumpMultiplier = 2 + roll3 * 4;
-      score += baseIncrement * jumpMultiplier;
-    } else {
-      // Normal — steady increment
-      score += baseIncrement;
-    }
-
-    // Floor at 1
-    if (score < 1) score = 1;
-  }
-
-  return Math.floor(score);
-};
-
-/**
  * Generate a pre-determined sequence of scores for a run.
  *
  * The step count is randomized within stepRange using a triangular distribution
@@ -110,7 +53,10 @@ export const computeScoreAtMs = (
  * Because the PRNG is seeded deterministically, every player gets the same
  * sequence for the same day/run.
  *
- * RNG consumption order:
+ * Late-run acceleration: starting at step 2 (k = t - 1), each step's base
+ * increment and jump chance scale up. Step 1 is a neutral warm-up.
+ *
+ * RNG consumption order (do not change — determinism depends on it):
  *   2 calls for step-count (triangular distribution)
  *   2 calls for initial spike check (step 0)
  *   3 calls per subsequent step (branch selector, increment size, magnitude)
@@ -143,17 +89,27 @@ export const generateSequence = (
 
   // Steps 1..stepCount-1 (each consumes exactly 3 RNG calls)
   const [lo, hi] = personality.baseIncrementRange;
+  const [jumpLo, jumpHi] = personality.jumpMultiplierRange;
   for (let t = 1; t < stepCount; t++) {
     const roll = rng();
     const baseIncrement = lo + rng() * (hi - lo);
     const roll3 = rng();
 
+    // k = 0 on step 1 (warm-up), k = 1 on step 2, etc.
+    const k = t - 1;
+    const effectiveBase = baseIncrement * (1 + ACCEL_BASE_PER_STEP * k);
+    const effectiveJumpChance = Math.min(
+      JUMP_CHANCE_CAP,
+      personality.jumpChance + ACCEL_JUMP_PER_STEP * k
+    );
+
     if (roll < personality.dipChance) {
-      score -= baseIncrement * (0.5 + roll3 * 1.5);
-    } else if (roll < personality.dipChance + personality.jumpChance) {
-      score += baseIncrement * (2 + roll3 * 4);
+      score -= effectiveBase * (0.5 + roll3 * 1.5);
+    } else if (roll < personality.dipChance + effectiveJumpChance) {
+      const jumpMultiplier = jumpLo + roll3 * (jumpHi - jumpLo);
+      score += effectiveBase * jumpMultiplier;
     } else {
-      score += baseIncrement;
+      score += effectiveBase;
     }
     if (score < 1) score = 1;
     sequence.push(Math.floor(score));

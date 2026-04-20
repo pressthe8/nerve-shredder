@@ -13,6 +13,7 @@ const RunPersonalitySchema = z.object({
   jumpChance: z.number(),
   dipChance: z.number(),
   initialSpikeChance: z.number(),
+  jumpMultiplierRange: z.tuple([z.number(), z.number()]),
 });
 
 // The backend defines a step range; actual step count is determined by the PRNG
@@ -26,35 +27,75 @@ type ServerRun = z.infer<typeof ServerRunSchema>;
 // 3 distinct run personalities per day
 const generateDailyRuns = (): ServerRun[] => {
   return [
+    // Slow & Cautious
     {
-      personality: { baseIncrementRange: [1, 5] as [number, number], jumpChance: 0.05, dipChance: 0.1, initialSpikeChance: 0.2 },
-      stepRange: [6, 14] as [number, number],
+      personality: {
+        baseIncrementRange: [1, 5] as [number, number],
+        jumpChance: 0.05,
+        dipChance: 0.1,
+        initialSpikeChance: 0.2,
+        jumpMultiplierRange: [2, 6] as [number, number],
+      },
+      stepRange: [6, 20] as [number, number],
     },
+    // Fast & Volatile
     {
-      personality: { baseIncrementRange: [3, 10] as [number, number], jumpChance: 0.15, dipChance: 0.2, initialSpikeChance: 0.05 },
-      stepRange: [4, 10] as [number, number],
+      personality: {
+        baseIncrementRange: [3, 10] as [number, number],
+        jumpChance: 0.15,
+        dipChance: 0.2,
+        initialSpikeChance: 0.05,
+        jumpMultiplierRange: [4, 12] as [number, number],
+      },
+      stepRange: [4, 16] as [number, number],
     },
+    // Moderate & Spiky
     {
-      personality: { baseIncrementRange: [2, 6] as [number, number], jumpChance: 0.1, dipChance: 0.15, initialSpikeChance: 0.5 },
-      stepRange: [8, 18] as [number, number],
+      personality: {
+        baseIncrementRange: [2, 6] as [number, number],
+        jumpChance: 0.1,
+        dipChance: 0.15,
+        initialSpikeChance: 0.5,
+        jumpMultiplierRange: [3, 10] as [number, number],
+      },
+      stepRange: [8, 30] as [number, number],
     },
   ];
 };
 
-const getDailyRuns = async (dayId: string): Promise<ServerRun[]> => {
-  const runsStr = await redis.get(`global:day:${dayId}:runs`);
-  if (runsStr) {
-    const parsed = JSON.parse(runsStr) as Record<string, unknown>[];
-    // Migrate stale data: old format had bongTimeMs, new format has stepRange
-    const isOldFormat = parsed[0] && 'bongTimeMs' in parsed[0] && !('stepRange' in parsed[0]);
-    if (!isOldFormat) {
-      return parsed as unknown as ServerRun[];
+type DailyRunsBundle = { runs: ServerRun[]; peakSum: number };
+
+const computePeakSum = (dayId: string, runs: ServerRun[]): number => {
+  let sum = 0;
+  for (let i = 0; i < runs.length; i++) {
+    const run = runs[i]!;
+    const seed = hashSeed(dayId, i);
+    const sequence = generateSequence(seed, run.personality, run.stepRange);
+    sum += Math.max(...sequence);
+  }
+  return sum;
+};
+
+const getDailyRuns = async (dayId: string): Promise<DailyRunsBundle> => {
+  const cachedStr = await redis.get(`global:day:${dayId}:runs`);
+  if (cachedStr) {
+    const parsed = JSON.parse(cachedStr) as Record<string, unknown>;
+    // New bundle format: { runs, peakSum }
+    const bundleRuns = (parsed as { runs?: unknown }).runs;
+    const bundlePeak = (parsed as { peakSum?: unknown }).peakSum;
+    if (Array.isArray(bundleRuns) && typeof bundlePeak === 'number') {
+      const first = bundleRuns[0] as { personality?: { jumpMultiplierRange?: unknown } } | undefined;
+      if (first?.personality?.jumpMultiplierRange) {
+        return { runs: bundleRuns as ServerRun[], peakSum: bundlePeak };
+      }
     }
-    // Fall through to regenerate with new format
+    // Legacy array format (pre-bundle) or stale personality format — fall through to regenerate
   }
   const runs = generateDailyRuns();
-  await redis.set(`global:day:${dayId}:runs`, JSON.stringify(runs));
-  return runs;
+  const peakSum = computePeakSum(dayId, runs);
+  const bundle: DailyRunsBundle = { runs, peakSum };
+  await redis.set(`global:day:${dayId}:runs`, JSON.stringify(bundle));
+  return bundle;
 };
 
 // Shuffles an array seedlessly for randomness per-player but deterministic order.
