@@ -7,11 +7,24 @@ import { TRPCProvider } from './lib/TRPCProvider.js';
 import { trpc } from './lib/trpc.js';
 import { HowToPlay } from './components/HowToPlay.js';
 import { STEP_DISPLAY_MS } from '../shared/scoreEngine.js';
+import type { ShredometerTier } from '../shared/shredometer.js';
+
+const TIER_CONFIG: Record<ShredometerTier, { icon: string; label: string; copy: string; color: string; glow: string; border: string }> = {
+  FROZEN: { icon: '❄️', label: 'FROZEN',  copy: 'The Shredder barely noticed.',  color: 'text-neutral-400', glow: '',                border: 'border-neutral-700/40' },
+  COLD:   { icon: '🧊', label: 'COLD',    copy: 'You left money on the table.',  color: 'text-sky-400',     glow: 'text-glow-cyan',   border: 'border-sky-700/40' },
+  WARM:   { icon: '🌡️', label: 'WARM',    copy: 'You made it work for it.',      color: 'text-amber-400',   glow: 'text-glow-amber',  border: 'border-amber-700/40' },
+  HOT:    { icon: '🔥', label: 'HOT',     copy: 'You rattled the Shredder.',     color: 'text-orange-500',  glow: 'text-glow-amber',  border: 'border-orange-700/40' },
+  MAXED:  { icon: '☠️', label: 'MAXED',   copy: 'You broke the Shredder.',       color: 'text-red-500',     glow: 'text-glow-red',    border: 'border-red-700/40' },
+};
 
 const GameContent = () => {
   const { data: weekInfo } = trpc.game.getPostWeekInfo.useQuery();
   const { data: gameState, refetch } = trpc.game.getGameState.useQuery(undefined, {
     enabled: weekInfo?.isActiveWeek !== false,
+  });
+  const allRunsComplete = gameState?.runsCompleted.every(Boolean) ?? false;
+  const { data: verdict } = trpc.game.getDailyVerdict.useQuery(undefined, {
+    enabled: allRunsComplete,
   });
   const startRun = trpc.game.startRun.useMutation();
   const bankRun = trpc.game.bankRun.useMutation();
@@ -316,20 +329,19 @@ const GameContent = () => {
                </div>
              )}
 
-             {/* Weekly Summary - Secondary */}
-             {gameState && gameState.weeklyScore > 0 && (
-               <div className="mt-2 mb-8 bg-gradient-to-br from-amber-950/30 to-amber-900/15 border border-amber-700/20 rounded-md p-4">
-                 <h3 className="text-neutral-400 text-xs font-bold tracking-[.3em] mb-2 uppercase">THIS WEEK</h3>
-                 <div className="text-2xl font-mono font-black italic text-amber-400 tracking-tighter text-glow-amber">
-                   £{gameState.weeklyScore.toLocaleString()}
-                 </div>
-                 {gameState.weekPerfectDays > 0 && (
-                   <div className="mt-1 text-xs text-amber-300/70">
-                     {gameState.weekPerfectDays}/7 Perfect Days this week
+             {/* Shredometer — end-of-day verdict vs. the Shredder */}
+             {verdict?.tier && (() => {
+               const t = TIER_CONFIG[verdict.tier];
+               return (
+                 <div className={`mt-2 mb-6 bg-neutral-900/40 border ${t.border} rounded-md p-4 animate-in fade-in duration-500`}>
+                   <h3 className="text-neutral-400 text-xs font-bold tracking-[.3em] mb-2 uppercase">Shredometer</h3>
+                   <div className={`text-3xl font-mono font-black italic tracking-tighter ${t.color} ${t.glow}`}>
+                     <span className="mr-2">{t.icon}</span>{t.label}
                    </div>
-                 )}
-               </div>
-             )}
+                   <div className="mt-2 text-sm text-neutral-400 font-medium">{t.copy}</div>
+                 </div>
+               );
+             })()}
 
              <button onClick={(e) => exitExpandedMode(e.nativeEvent)} className="w-full py-3 bg-neutral-700 hover:bg-neutral-600 text-white font-black text-base tracking-widest active:scale-95 transition-transform flex items-center justify-center skew-x-[-12deg]">
                <span className="inline-block skew-x-[12deg]">BACK TO HOME</span>

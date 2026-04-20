@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { router, publicProcedure } from '../trpc.js';
 import { context, redis, reddit } from '@devvit/web/server';
 import { generateSequence, hashSeed, STEP_DISPLAY_MS } from '../../shared/scoreEngine.js';
+import { bucketShredometerTier, type ShredometerTier } from '../../shared/shredometer.js';
 import { getWeekId, getDayOfWeek, getGameDayLabel, getWeekLabel } from '../../shared/weekUtils.js';
 import { awardBetaTesterFlairIfEligible } from '../core/flair.js';
 import { buildOptimalBankComment } from '../core/commentCopy.js';
@@ -255,20 +256,29 @@ export const gameRouter = router({
     };
   }),
 
-  joinSubreddit: publicProcedure.mutation(async () => {
+  getDailyVerdict: publicProcedure.query(async () => {
     const user = await reddit.getCurrentUser();
-    const username = user?.username;
-    console.log(`[joinSubreddit] username=${username ?? 'null'}`);
-    if (!username) return { ok: false };
-    try {
-      await reddit.subscribeToCurrentSubreddit();
-      console.log(`[joinSubreddit] subscribed ok`);
-    } catch (e) {
-      console.error(`[joinSubreddit] subscribe failed:`, e);
+    const username = user?.username ?? 'anonymous';
+    const now = new Date();
+    const epochStart = new Date('2024-01-01T00:00:00Z');
+    const dayId = Math.floor((now.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24)).toString();
+
+    if (!(await hasCompletedAllRuns(username, dayId))) {
+      return { tier: null as ShredometerTier | null };
     }
-    await redis.set(`user:${username}:joined_sub`, '1');
-    console.log(`[joinSubreddit] redis flag set`);
-    return { ok: true };
+
+    const totalScoreStr = await redis.hGet(`user:${username}:day:${dayId}:totals`, 'score');
+    const dailyTotal = totalScoreStr ? parseInt(totalScoreStr, 10) : 0;
+
+    const { peakSum } = await getDailyRuns(dayId);
+    if (peakSum <= 0) {
+      return { tier: null as ShredometerTier | null };
+    }
+
+    const ratio = dailyTotal / peakSum;
+    const tier = bucketShredometerTier(ratio);
+    console.log(`[verdict] verdict_key=${username}:${dayId} dailyTotal=${dailyTotal} peakSum=${peakSum} ratio=${ratio.toFixed(3)} tier=${tier}`);
+    return { tier };
   }),
 
   startRun: publicProcedure
@@ -301,7 +311,7 @@ export const gameRouter = router({
       void redis.expire(startTimeKey, 172800);
 
       // Get daily runs and generate the deterministic sequence
-      const runs = await getDailyRuns(dayId);
+      const { runs } = await getDailyRuns(dayId);
       const run = runs[input.runIndex];
 
       if (!run) throw new Error("Run data not found");
@@ -348,7 +358,7 @@ export const gameRouter = router({
         throw new Error("Run not started");
       }
 
-      const runs = await getDailyRuns(dayId);
+      const { runs } = await getDailyRuns(dayId);
       const run = runs[input.runIndex];
 
       if (!run) throw new Error("Run data not found");
