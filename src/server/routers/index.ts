@@ -461,8 +461,8 @@ export const gameRouter = router({
       const snapshotKey = `leaderboard:weekly:week:${weekId}:snapshot_day:${dayId}`;
       const snapshotExists = await redis.get(snapshotKey);
       if (!snapshotExists) {
-        const currentTopScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 199, { by: 'rank' });
-        const snapshotEntries = currentTopScores.reverse().map((e: { member: string; score: number }) => ({
+        const currentTopScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 199, { by: 'rank', reverse: true });
+        const snapshotEntries = currentTopScores.map((e: { member: string; score: number }) => ({
           username: e.member,
           score: e.score,
         }));
@@ -580,8 +580,8 @@ export const gameRouter = router({
         return { locked: true as const, entries: [] };
       }
 
-      const topScores = await redis.zRange(`leaderboard:daily:day:${dayId}`, 0, 199, { by: 'rank' });
-      const entries = topScores.reverse().map((entry: { member: string; score: number }) => ({
+      const topScores = await redis.zRange(`leaderboard:daily:day:${dayId}`, 0, 199, { by: 'rank', reverse: true });
+      const entries = topScores.map((entry: { member: string; score: number }) => ({
         username: entry.member,
         score: entry.score,
       }));
@@ -650,7 +650,7 @@ export const gameRouter = router({
       }
 
       // Player completed all runs — show live data with played-today indicator
-      const topScores = (await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 199, { by: 'rank' })).reverse();
+      const topScores = await redis.zRange(`leaderboard:weekly:week:${weekId}`, 0, 199, { by: 'rank', reverse: true });
       const entriesWithStatus = await Promise.all(
         topScores.map(async (entry: { member: string; score: number }) => {
           const dailyScore = await redis.zScore(`leaderboard:daily:day:${dayId}`, entry.member);
@@ -897,7 +897,7 @@ export const gameRouter = router({
       const dayId = Math.floor((now.getTime() - epochStart.getTime()) / (1000 * 60 * 60 * 24)).toString();
 
       // Get today's leaderboard players to check their flags
-      const topPlayers = await redis.zRange(`leaderboard:daily:day:${dayId}`, 0, 99, { by: 'rank' });
+      const topPlayers = await redis.zRange(`leaderboard:daily:day:${dayId}`, 0, 99, { by: 'rank', reverse: true });
 
       const results: Array<{
         username: string;
